@@ -1,0 +1,5 @@
+node_modules/
+*.tgz
+dev-vault.json
+*.tmp
+.DS_Store

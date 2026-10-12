@@ -1,0 +1,40 @@
+{
+  "name": "voltrama-pass",
+  "version": "0.1.0",
+  "description": "Gerenciador de senhas 100% local, no estilo Bitwarden. Rode com npx voltrama-pass.",
+  "type": "module",
+  "bin": {
+    "voltrama-pass": "bin/voltrama-pass.js"
+  },
+  "main": "src/vault.js",
+  "exports": {
+    ".": "./src/vault.js",
+    "./generator": "./src/generator.js",
+    "./importers/bitwarden": "./src/importers/bitwarden.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "public",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node bin/voltrama-pass.js",
+    "dev": "node bin/voltrama-pass.js ui --vault ./dev-vault.json --idle 0",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20.10"
+  },
+  "keywords": [
+    "password-manager",
+    "vault",
+    "offline",
+    "local-first",
+    "bitwarden",
+    "cli"
+  ],
+  "author": "Bruno <devbrunosantos@gmail.com>",
+  "license": "MIT"
+}
