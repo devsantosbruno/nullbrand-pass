@@ -1,31 +1,36 @@
 {
-  "name": "voltrama-pass",
+  "name": "nullbrand",
   "version": "0.1.0",
-  "description": "Gerenciador de senhas 100% local, no estilo Bitwarden. Rode com npx voltrama-pass.",
+  "description": "100% local, Bitwarden-style password manager (early release, not independently audited). Run it with npx nullbrand.",
   "type": "module",
   "bin": {
-    "voltrama-pass": "bin/voltrama-pass.js"
+    "nullbrand": "dist/bin/nullbrand.js"
   },
-  "main": "src/vault.js",
   "exports": {
-    ".": "./src/vault.js",
-    "./generator": "./src/generator.js",
-    "./importers/bitwarden": "./src/importers/bitwarden.js"
+    ".": "./dist/src/vault.js",
+    "./generator": "./dist/src/generator.js",
+    "./importers/bitwarden": "./dist/src/importers/bitwarden.js"
   },
   "files": [
-    "bin",
-    "src",
-    "public",
+    "dist",
+    "!dist/test",
+    "!dist/**/*.d.ts",
+    "!dist/.tsbuildinfo",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "SECURITY.md"
   ],
   "scripts": {
-    "start": "node bin/voltrama-pass.js",
-    "dev": "node bin/voltrama-pass.js ui --vault ./dev-vault.json --idle 0",
-    "test": "node --test test/*.test.js"
+    "build": "node scripts/copy-assets.mjs clean && tsc -b && node scripts/copy-assets.mjs copy",
+    "typecheck": "tsc -b",
+    "check": "node scripts/check-no-escape.mjs",
+    "dev": "npm run build && node dist/bin/nullbrand.js ui --vault ./dev-vault.json --idle 0",
+    "test": "node --test dist/test/*.test.js scripts/*.test.mjs",
+    "verify": "npm run check && npm run build && npm test",
+    "prepack": "npm run verify"
   },
   "engines": {
-    "node": ">=20.10"
+    "node": ">=22.14.0"
   },
   "keywords": [
     "password-manager",
@@ -35,6 +40,17 @@
     "bitwarden",
     "cli"
   ],
-  "author": "Bruno <devbrunosantos@gmail.com>",
-  "license": "MIT"
+  "author": "Bruno (https://github.com/devsantosbruno)",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "6.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devsantosbruno/nullbrand.git"
+  },
+  "homepage": "https://github.com/devsantosbruno/nullbrand#readme",
+  "bugs": {
+    "url": "https://github.com/devsantosbruno/nullbrand/issues"
+  }
 }
