@@ -3,3 +3,13 @@ node_modules/
 dev-vault.json
 *.tmp
 .DS_Store
+dist/
+.nullbrand/
+*vault*.json
+*backup*.json
+*.bak
+*.bak-*
+.env*
+# the only vault/backup files allowed in the repo are the test fixtures (master password in their README)
+!test/fixtures/
+!test/fixtures/*.json
