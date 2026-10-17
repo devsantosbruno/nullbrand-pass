@@ -25,7 +25,9 @@ The command starts a web interface **on `127.0.0.1` only** and opens your browse
 
 ## Requirements
 
-Node.js 22.14 or newer (tested on 22.14).
+Node.js 22.14 or newer. CI runs `npm run verify` on Linux, macOS and Windows with Node 22.14.0 and the current LTS.
+
+Linux: copying to the clipboard needs `xclip`, `xsel` or `wl-clipboard` installed.
 
 Limitation: hiding the password as you type relies on a private, undocumented readline method (`_writeToOutput`). If a future Node release removes it, the password prompt refuses to run (`err.prompt.cannotMask`) instead of echoing the password; the test `contract: readline still exposes the private _writeToOutput` fails early when that happens.
 
@@ -60,6 +62,8 @@ Command-line flags:
 
 To install permanently: `npm install -g nullbrand` and just use `nullbrand`.
 
+Releases are tagged `vX.Y.Z` and listed in [CHANGELOG.md](CHANGELOG.md). nullbrand never checks for updates.
+
 ## Language
 
 nullbrand speaks English (`en`) and Portuguese (`pt`). The language is picked from the first of these that has a valid value:
@@ -79,7 +83,7 @@ NULLBRAND_LANG=pt npx nullbrand get github
 
 **Where the choice is saved.** The EN | PT switch in the web interface (also on the unlock screen) writes `{ "lang": "pt" }` to `config.json` in the data folder (`~/.nullbrand/config.json`, or `$NULLBRAND_HOME/config.json`). The file sits outside the encrypted vault so the unlock screen can open in the right language before the master password is typed. It is created only when you pick a language: an auto-detected language is never written. Other fields in the file are kept. `--vault` does not move it.
 
-The texts live in `locales/en.json` and `locales/pt.json` (flat keys, `{name}` placeholders, `_one`/`_other` plural suffixes). The CLI and the web interface read the same files. To add a language, add `locales/<code>.json` with the same keys and register the code in `SUPPORTED` in `public/i18n.js`; the tests fail if a key or placeholder is missing.
+The texts live in `locales/en.json` and `locales/pt.json` (flat keys, `{name}` placeholders, `_one`/`_other` plural suffixes). The CLI and the web interface read the same files. To add a language, add `locales/<code>.json` with the same keys and register the code in `SUPPORTED` in `src/shared/i18n.ts`; the tests fail if a key or placeholder is missing.
 
 ## Where the data lives
 
@@ -112,6 +116,8 @@ The file has a plain-text header (format, version, scrypt parameters and salt) a
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ```bash
 npm test          # tests (node:test)
 npm run dev       # rebuilds, then opens the UI on ./dev-vault.json (separate from your real vault), no auto-lock
@@ -137,16 +143,6 @@ src/shared/                 code shared by Node and the browser (types, guards, 
 src/web/                    web interface logic (app.ts)
 static/                     index.html, styles.css, favicon.svg
 locales/                    en.json, pt.json (shared by the CLI and the UI)
-```
-
-## Publishing to npm
-
-`prepublishOnly` runs `npm run verify` (typecheck, escape-hatch check, build, all tests). Enable 2FA on the npm account, then:
-
-```bash
-npm login
-npm pack --dry-run   # review the file list
-npm publish
 ```
 
 ## License
