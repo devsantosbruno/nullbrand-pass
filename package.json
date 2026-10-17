@@ -40,17 +40,17 @@
     "bitwarden",
     "cli"
   ],
-  "author": "Bruno (https://github.com/devsantosbruno)",
+  "author": "Bruno Santos (https://github.com/devsantosbruno)",
   "license": "MIT",
   "devDependencies": {
     "typescript": "6.0.3"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/devsantosbruno/nullbrand.git"
+    "url": "git+https://github.com/devsantosbruno/nullbrand-pass.git"
   },
-  "homepage": "https://github.com/devsantosbruno/nullbrand#readme",
+  "homepage": "https://github.com/devsantosbruno/nullbrand-pass#readme",
   "bugs": {
-    "url": "https://github.com/devsantosbruno/nullbrand/issues"
+    "url": "https://github.com/devsantosbruno/nullbrand-pass/issues"
   }
 }

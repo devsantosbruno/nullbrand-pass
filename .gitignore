@@ -13,3 +13,6 @@ dist/
 # the only vault/backup files allowed in the repo are the test fixtures (master password in their README)
 !test/fixtures/
 !test/fixtures/*.json
+
+# local planning documents, never published
+.spec/
