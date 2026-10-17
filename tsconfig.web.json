@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "src/web",
+    "rootDirs": ["src/web", "src/shared"],
+    "outDir": "dist/public",
+    "tsBuildInfoFile": "dist/.tsbuildinfo/web.tsbuildinfo"
+  },
+  "include": ["src/web/**/*.ts"],
+  "references": [{ "path": "./tsconfig.shared.json" }]
+}
