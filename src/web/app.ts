@@ -28,82 +28,16 @@ import type { Guard } from './api-guards.js';
 import { errorMessage } from './guards.js';
 import { isItemType } from './vault-types.js';
 import type { IdentityKey, ItemType, VaultItem } from './vault-types.js';
-
-// ---------- DOM access ----------
-// The HTML is the app's own, so an element that is not there (or is not what the code expects) is a bug: it throws, it never
-// turns into a silent no-op. `instanceof` narrows; there are no type assertions.
-class DomError extends Error {
-  constructor(what: string) {
-    super(`nullbrand: missing or unexpected DOM node: ${what}`);
-    this.name = 'DomError';
-  }
-}
-type Class<T> = { new (...args: never[]): T; prototype: T };
-function expectInstance<T>(value: unknown, kind: Class<T>, what: string): T {
-  if (value instanceof kind) return value;
-  throw new DomError(what);
-}
-const query = <T extends Element>(root: ParentNode, selector: string, kind: Class<T>): T => expectInstance(root.querySelector(selector), kind, selector);
-const queryAll = <T extends Element>(root: ParentNode, selector: string, kind: Class<T>): T[] =>
-  [...root.querySelectorAll(selector)].map((node) => expectInstance(node, kind, selector));
-const $ = (sel: string): HTMLElement => query(document, sel, HTMLElement);
-const $input = (sel: string): HTMLInputElement => query(document, sel, HTMLInputElement);
-const $textarea = (sel: string): HTMLTextAreaElement => query(document, sel, HTMLTextAreaElement);
-const $button = (sel: string): HTMLButtonElement => query(document, sel, HTMLButtonElement);
-const $dialog = (sel: string): HTMLDialogElement => query(document, sel, HTMLDialogElement);
-const $form = (sel: string): HTMLFormElement => query(document, sel, HTMLFormElement);
-
-// A data-* attribute that the HTML always sets.
-class DomValueError extends Error {
-  constructor(what: string) {
-    super(`nullbrand: unexpected value: ${what}`);
-    this.name = 'DomValueError';
-  }
-}
-function data(node: HTMLElement, name: string): string {
-  const value = node.dataset[name];
-  if (value === undefined) throw new DomValueError(`missing data-${name}`);
-  return value;
-}
-// A string that must be one of a known list.
-function oneOf<T extends string>(value: string, allowed: readonly T[], what: string): T {
-  const found = allowed.find((candidate) => candidate === value);
-  if (found === undefined) throw new DomValueError(`${what} is not one of the expected values`);
-  return found;
-}
-const dataOneOf = <T extends string>(node: HTMLElement, name: string, allowed: readonly T[]): T => oneOf(data(node, name), allowed, `data-${name}`);
-// textContent is `string | null` for any Node; for the elements of this page it is always a string.
-function textOf(node: HTMLElement): string {
-  const text = node.textContent;
-  if (text === null) throw new DomValueError('textContent is null');
-  return text;
-}
-// arr[index] for an index that is known to be inside the array.
-function at<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  if (item === undefined) throw new DomValueError('index out of range');
-  return item;
-}
-// Node.contains() for the target of an event.
-const containsTarget = (root: Node, target: EventTarget | null): boolean => target instanceof Node && root.contains(target);
-
-type Child = Node | string | null | undefined;
-// The properties to set on the new element: any of the element's own, except that `style` may be a CSS text and `textContent` a number
-// (the DOM converts both).
-type ElementProps<K extends keyof HTMLElementTagNameMap> = Partial<Omit<HTMLElementTagNameMap[K], 'style' | 'textContent'>> & { style?: string; textContent?: string | number };
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: ElementProps<K> = {}, ...children: Child[]): HTMLElementTagNameMap[K] => {
-  const node = Object.assign(document.createElement(tag), props);
-  for (const c of children) if (c != null) node.append(c);
-  return node;
-};
+import { $, $button, $dialog, $form, $input, $textarea, DomError, DomValueError, at, containsTarget, data, dataOneOf, el, expectInstance, firstFile, oneOf, query, queryAll, textOf, tx } from './dom.js';
+import { currentItem, state } from './state.js';
+import { strengthLevel } from './ui/strength.js';
+import { hostOf, isHttpUrl, normalizeUrl, siteDomain } from './ui/url.js';
 
 // ---------- i18n ----------
 // Dictionaries come from /locales/<lang>.json (same files as the CLI). `t` is replaced on language change.
 const dicts: Record<string, Dict | undefined> = {};
 let lang: Lang = FALLBACK;
 let t: Translator = createT(lang, dicts);
-// <span data-i18n> placeholder, filled by applyI18n.
-const tx = (key: string): HTMLSpanElement => { const n = document.createElement('span'); n.dataset['i18n'] = key; return n; };
 const lc = (label: string): string => (label === label.toUpperCase() ? label : label.toLowerCase());
 
 // A response that does not have the shape the UI expects. Nothing is rendered from it: the screen stays as it was.
@@ -214,28 +148,6 @@ async function api<K extends ApiRoute>(route: K, { guard, body, path }: { guard:
 // The message of a caught value, for textContent.
 const msgOf = (ex: unknown): string | null => errorMessage(ex) ?? null;
 
-// ---------- State ----------
-interface State {
-  status: StatusResponse | null;
-  items: PublicItem[];
-  filter: string;
-  folder: string | null;
-  folders: string[];
-  query: string;
-  selection: Set<string>;
-  selectedId: string | null;
-  current: VaultItem | null;
-  editing: VaultItem | null;
-}
-const state: State = { status: null, items: [], filter: 'all', folder: null, folders: [], query: '', selection: new Set(), selectedId: null, current: null, editing: null };
-
-// The item shown in the detail pane. The callers run only after one was loaded.
-function currentItem(): VaultItem {
-  const item = state.current;
-  if (item === null) throw new DomValueError('no item is selected');
-  return item;
-}
-
 type ScreenName = 'nosession' | 'setup' | 'unlock' | 'vault';
 let currentScreen: ScreenName | null = null; // null until the first screen is chosen (the page starts with all of them hidden)
 function showScreen(name: ScreenName): void {
@@ -311,22 +223,11 @@ async function copy(text: string, what: string, { sensitive = false }: { sensiti
   }
 }
 
-// Approximate strength of a typed password (simple heuristic, only for the meter).
-function strength(pw: string): number {
-  if (!pw) return 0;
-  let pool = 0;
-  if (/[a-z]/.test(pw)) pool += 26;
-  if (/[A-Z]/.test(pw)) pool += 26;
-  if (/\d/.test(pw)) pool += 10;
-  if (/[^a-zA-Z0-9]/.test(pw)) pool += 30;
-  const unique = new Set(pw).size;
-  return Math.round(Math.min(pw.length, unique * 1.5) * Math.log2(Math.max(pool, 2)));
-}
 function paintMeter(span: HTMLElement, pw: string): void {
-  const bits = strength(pw);
+  const { bits, level } = strengthLevel(pw);
   const pct = Math.min(100, (bits / 100) * 100);
   span.style.width = `${pct}%`;
-  span.style.background = bits < 40 ? 'var(--err)' : bits < 70 ? 'var(--warn)' : 'var(--ok)';
+  span.style.background = level === 'weak' ? 'var(--err)' : level === 'medium' ? 'var(--warn)' : 'var(--ok)';
 }
 
 // ---------- Language ----------
@@ -748,10 +649,6 @@ $('#filters').addEventListener('click', (e) => {
 });
 
 // ---------- List ----------
-function hostOf(uri: string): string {
-  try { return new URL(/^[a-z]+:\/\//i.test(uri) ? uri : `https://${uri}`).hostname.replace(/^www\./, ''); } catch { return uri; }
-}
-
 function visibleItems(): PublicItem[] {
   const q = state.query.trim().toLowerCase();
   return state.items.filter((i) => {
@@ -987,11 +884,6 @@ const iconBtn = (name: IconName, label: string, className = 'dv-icon-btn'): HTML
   return b;
 };
 
-const siteHref = (u: string): string => (/^[a-z]+:\/\//i.test(u) ? u : `https://${u}`);
-const siteDomain = (u: string): string => {
-  try { return new URL(siteHref(u)).host; } catch { return u.replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, ''); }
-};
-
 // Reusable field row for the detail pane.
 // kind: 'text' | 'password' | 'site'. The real password only enters the DOM when shown.
 interface FieldRowOptions {
@@ -1008,9 +900,7 @@ function FieldRow(label: string, value: string, { kind = 'text', meter = true, p
 
   if (kind === 'password') {
     let shown = false;
-    const bits = strength(value);
-    const level = bits < 40 ? 'weak' : bits < 70 ? 'medium' : 'strong';
-    const active = bits < 28 ? 1 : bits < 40 ? 2 : bits < 70 ? 3 : 4;
+    const { level, active } = strengthLevel(value);
     const strengthEl = el('div', { className: `frow-strength ${level === 'strong' ? 'ok' : level === 'medium' ? 'warn' : 'err'}` });
     const segs = el('div', { className: 'frow-segs' });
     for (let n = 0; n < 4; n++) segs.append(el('span', { className: n < active ? 'on' : '' }));
@@ -1028,8 +918,8 @@ function FieldRow(label: string, value: string, { kind = 'text', meter = true, p
     if (meter) body.append(strengthEl);
     actions.append(toggle);
   } else if (kind === 'site') {
-    const href = siteHref(value);
-    if (/^https?:\/\//i.test(href)) {
+    if (isHttpUrl(value)) {
+      const href = normalizeUrl(value);
       valueEl.append(el('a', { href, textContent: siteDomain(value), target: '_blank', rel: 'noopener noreferrer' }));
       const open = el('a', { className: 'dv-icon-btn', href, target: '_blank', rel: 'noopener noreferrer' });
       open.setAttribute('aria-label', t('aria.openSite'));
@@ -1512,12 +1402,6 @@ $('#ssh-regen').addEventListener('click', async () => { if (await confirmSshOver
 sshPaste.addEventListener('input', () => { if (/-----END [A-Z ]*PRIVATE KEY-----/.test(sshPaste.value)) sshImport(); });
 sshPaste.addEventListener('blur', () => { if (sshPaste.value.trim()) sshImport(); });
 $('#ssh-pick').addEventListener('click', async () => { if (await confirmSshOverwrite('import')) $('#ssh-file').click(); });
-// The first file chosen in a file input, if any.
-function firstFile(input: HTMLInputElement): File | undefined {
-  const files = input.files;
-  if (files === null) throw new DomValueError('file input without a file list');
-  return files[0];
-}
 const sshFile = $input('#ssh-file');
 sshFile.addEventListener('change', async () => {
   const file = firstFile(sshFile);

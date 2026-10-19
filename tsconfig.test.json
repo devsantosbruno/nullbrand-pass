@@ -8,6 +8,8 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/.tsbuildinfo/test.tsbuildinfo"
   },
-  "include": ["test/**/*.ts", "test/types/**/*.d.ts", "src/types/node/**/*.d.ts"],
+  // The DOM-free helpers of the web UI are compiled here too (lib ES2022, no DOM) so the Node runner can test them; the browser build
+  // of the same files is the one in tsconfig.web.json.
+  "include": ["test/**/*.ts", "test/types/**/*.d.ts", "src/types/node/**/*.d.ts", "src/web/ui/url.ts", "src/web/ui/strength.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

@@ -175,6 +175,9 @@ declare class URL {
   constructor(input: string, base?: string | URL);
   // Percent-encoded path component, always starting with '/' for http(s) URLs.
   readonly pathname: string;
+  // Docs: `host` is the hostname plus the port when it is not the default one; `hostname` has no port. IPv6 hosts keep their brackets.
+  readonly host: string;
+  readonly hostname: string;
   readonly searchParams: URLSearchParams;
 }
 
