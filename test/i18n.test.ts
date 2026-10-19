@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createT, fmtRelative, fmtDate, errText } from '../src/shared/i18n.js';
-import { at, entryOf, readDictFile, thrownKey, thrownMessage } from './support.js';
+import { fileURLToPath } from 'node:url';
+import { at, entryOf, readDictFile, thrownKey, thrownMessage, walkFiles } from './support.js';
 
 const load = (l: string) => readDictFile(new URL(`../locales/${l}.json`, import.meta.url));
 const en = load('en');
@@ -82,9 +83,12 @@ test('errText(): translates by key, falls back to the message', () => {
 test('every i18n key referenced in src/ and public/ exists in both dictionaries', async () => {
   const { readdir } = await import('node:fs/promises');
   const files: URL[] = [];
-  for (const dir of ['../src/', '../src/formats/', '../public/']) {
+  for (const dir of ['../src/', '../src/formats/']) {
     for (const f of await readdir(new URL(dir, import.meta.url))) if (f.endsWith('.js') || f.endsWith('.html')) files.push(new URL(dir + f, import.meta.url));
   }
+  // The browser code lives in subfolders too (ui/, features/).
+  const publicDir = new URL('../public/', import.meta.url);
+  for (const f of await walkFiles(fileURLToPath(publicDir))) if (f.endsWith('.js') || f.endsWith('.html')) files.push(new URL(f, publicDir));
   const prefixes = 'err|cli|help|field|ssh|type|filter|sel|list|folder|folders|delete|move|val|pw|tools|gen|setup|unlock|quit|destroy|menu|sidebar|nav|nosession|copied|copy|aria|strength|meta|fav|edit|password|reveal|notes|identity|placeholder|import|export|clipboard|server|warn|lang|detail|item|sshpub|sshover|common';
   const re = new RegExp(`['"\`=]((?:${prefixes})\\.[A-Za-z0-9.]+)['"\`]`, 'g');
   const dynamic = /^(strength|reveal\.\w+|warn\.permFixed|cli\.field|cli\.kind|type)\.$/; // composed at runtime

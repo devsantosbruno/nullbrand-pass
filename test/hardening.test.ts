@@ -16,7 +16,8 @@ import { run, macBackend, windowsBackend, waylandBackend, xclipBackend, xselBack
 import { openBrowser } from '../src/system.js';
 import type { SpawnFn } from '../src/system.js';
 import type { ChildProcess, ChildReadable, ChildWritable, SpawnOptions } from 'node:child_process';
-import { at, present, thrownMessage } from './support.js';
+import { fileURLToPath } from 'node:url';
+import { at, present, thrownMessage, walkFiles } from './support.js';
 
 const posix = process.platform !== 'win32';
 const skip = posix ? false : 'POSIX permissions do not apply to Windows';
@@ -235,7 +236,10 @@ test('without a session, ALL routes (API, static and unknown) answer 401 with no
     const source = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
     const keys = [...source.matchAll(/^\s+'((?:GET|POST|PUT|PATCH|DELETE) \/api\/[^']*)'/gm)].map((m) => at(m, 1));
     assert.ok(keys.length >= 20, `routes found: ${keys.length}`);
-    const statics = ['/', '/index.html', '/app.js', '/styles.css', '/favicon.svg', '/api', '/anything', '/api/does-not-exist'];
+    // Every file the build ships to the browser (modules in subfolders included) plus a few that do not exist: all behind the same wall.
+    const shipped = (await walkFiles(fileURLToPath(new URL('../public/', import.meta.url)))).filter((f) => !f.endsWith('.d.ts')).map((f) => `/${f}`);
+    assert.ok(shipped.includes('/app.js') && shipped.includes('/styles.css'), `shipped files: ${shipped.join(', ')}`);
+    const statics = ['/', ...shipped, '/api', '/anything', '/api/does-not-exist'];
     const targets = [
       ...keys.map((k) => { const [method = '', p = ''] = k.split(' '); return { method, path: p.replace(/:\w+/g, 'x') }; }),
       ...statics.map((path) => ({ method: 'GET', path })),

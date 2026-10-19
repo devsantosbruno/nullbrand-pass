@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { startServer } from '../src/server.js';
 import { createClipboard } from '../src/clipboard.js';
 import type { Backend } from '../src/clipboard.js';
-import { at, header, jsonRecord, jsonRecords, present } from './support.js';
+import { fileURLToPath } from 'node:url';
+import { at, header, jsonRecord, jsonRecords, present, walkFiles } from './support.js';
 
 test('local API: session, Host/Origin, full flow', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'vp-srv-'));
@@ -166,5 +167,32 @@ test('clipboard API: requires an unlocked vault, copies via the server and clear
   } finally {
     await srv.close();
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('static: every module the build ships (subfolders too) is served as JavaScript with the security headers, behind the session', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vp-static-'));
+  const srv = await startServer({ vaultPath: join(dir, 'vault.json') });
+  const base = `http://127.0.0.1:${srv.port}`;
+  try {
+    const cookie = header(await fetch(`${base}/auth?t=${srv.token}`, { redirect: 'manual' }), 'set-cookie').split(';')[0];
+    const modules = (await walkFiles(fileURLToPath(new URL('../public/', import.meta.url)))).filter((f) => f.endsWith('.js'));
+    assert.ok(modules.includes('app.js'));
+    for (const file of modules) {
+      assert.equal((await fetch(`${base}/${file}`)).status, 401, `${file} without a session`);
+      const res = await fetch(`${base}/${file}`, { headers: { Cookie: cookie, Origin: base } });
+      assert.equal(res.status, 200, file);
+      assert.match(header(res, 'content-type'), /^text\/javascript/, file);
+      assert.match(header(res, 'content-security-policy'), /script-src 'self'; style-src 'self'/, file);
+      assert.equal(header(res, 'x-content-type-options'), 'nosniff', file);
+      assert.equal(header(res, 'cache-control'), 'no-cache', file);
+    }
+    // The page loads exactly one script, and it is a same-origin module (no inline code, no other origin).
+    const html = await (await fetch(`${base}/`, { headers: { Cookie: cookie, Origin: base } })).text();
+    assert.deepEqual([...html.matchAll(/<script\b[^>]*>/g)].map((m) => at(m, 0)), ['<script type="module" src="/app.js">']);
+    assert.doesNotMatch(html, /<style\b|\sstyle="|\son[a-z]+="/i, 'no inline style or inline event handler in index.html');
+  } finally {
+    await srv.close();
+    await rm(dir, { recursive: true });
   }
 });

@@ -3,7 +3,8 @@
 // fails the test with an explicit message where the old JavaScript would have thrown a TypeError further down.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { readdir, stat, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { deriveKey, encryptJson } from '../src/crypto.js';
 import type { KdfParams } from '../src/crypto.js';
@@ -17,6 +18,18 @@ export function at<T>(list: readonly T[], index: number): T {
   const value = list[index];
   if (value === undefined) assert.fail(`expected an element at index ${index} (length ${list.length})`);
   return value;
+}
+
+// Every file under `dir` (subfolders included), as paths relative to it with "/" separators. The web build puts its modules in
+// subfolders (ui/, features/): a check that only lists the top level would silently skip them.
+export async function walkFiles(dir: string, prefix = ''): Promise<string[]> {
+  const files: string[] = [];
+  for (const name of await readdir(join(dir, prefix))) {
+    const rel = prefix ? `${prefix}/${name}` : name;
+    if ((await stat(join(dir, rel))).isFile()) files.push(rel);
+    else files.push(...(await walkFiles(dir, rel)));
+  }
+  return files;
 }
 
 // A value that must not be null / undefined.
