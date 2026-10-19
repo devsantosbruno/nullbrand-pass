@@ -9,7 +9,7 @@ This is an engineering check, not legal advice. Items marked **Pending** need a 
 - **No conflict found** for "nullbrand" in the sources that could be queried without a login (npm, GitHub, Homebrew, web search).
 - **Official trademark databases are still unchecked.** USPTO, EUIPO and INPI Brazil must be searched by hand before the first signed installer (spec 09). Until then the name is used as an unregistered mark with no clearance.
 - **Decision: do not register the mark yet.** Reassess before `1.0` or before the first signed installer, whichever comes first. Usage rules for forks are in [TRADEMARKS.md](../TRADEMARKS.md).
-- **Bitwarden** is named only to describe the import format. Positioning wording ("Bitwarden-style", the `bitwarden` npm keyword) was removed. The non-affiliation disclaimer stays in the README.
+- **Third-party names.** The project names no other product: positioning wording and the matching npm keyword were removed, and import is by file structure (spec 04). The non-affiliation disclaimer stays in the README.
 - **Distribution:** the desktop app, when it exists, will be a free download from the project site. It will not be listed in app stores or package managers, so store identifiers (reverse-DNS app ID, Flathub, winget) are out of scope.
 
 ## Name availability
@@ -34,22 +34,11 @@ This is an engineering check, not legal advice. Items marked **Pending** need a 
 
 Search the exact word and close variants (`null brand`, `nullbrand`, `nul brand`, `nulbrand`). Record each result with its date here.
 
-## Use of "Bitwarden"
+## Use of third-party names
 
-Rule: nominative, descriptive use only. No logos, no Bitwarden colors or product imagery, no wording that suggests endorsement or compatibility certification.
+Rule: none. No product names in code, UI, CLI, API, locales or docs; no logos, brand colors or product imagery; no wording that suggests endorsement or compatibility certification.
 
-| Place | Use | Verdict |
-| --- | --- | --- |
-| `README.md` disclaimer | "Not affiliated with or endorsed by Bitwarden" | Keep |
-| `README.md` features and import example | Names the import source | Keep |
-| `package.json` description | Said "Bitwarden-style" | **Changed** to a neutral description |
-| `package.json` keywords | Had `bitwarden` | **Removed** |
-| `README.md` tagline | Said "Bitwarden-style" | **Changed** |
-| `locales/*.json` | Import help, errors and hints name Bitwarden as the file source | Keep (describes the file the user must export) |
-| `src/importers/bitwarden.ts`, CLI `import bitwarden`, `/api/import/bitwarden` | Format name | Keep. Spec 04 renames these to a format-based layout. |
-| Images, icons, logos | None in the repo | OK |
-
-`scripts/trademark-usage.test.mjs` fails if the positioning wording comes back or if a Bitwarden logo asset is added.
+`scripts/trademark-usage.test.mjs` fails if a third-party product name appears in the shipped sources, the README or `package.json`, or if a brand asset is added to `static/`.
 
 ## Pending actions for the maintainer
 

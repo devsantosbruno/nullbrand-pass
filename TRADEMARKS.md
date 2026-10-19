@@ -25,7 +25,7 @@ If you distribute a modified version, please:
 
 ## Third-party names
 
-nullbrand is not affiliated with, endorsed by or sponsored by Bitwarden or any other password manager. Third-party names appear only to describe file formats that nullbrand can import. All such names belong to their owners.
+nullbrand is not affiliated with, endorsed by or sponsored by any other password manager. It names no third-party product: files are recognised by their structure.
 
 ## Questions
 

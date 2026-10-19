@@ -6,7 +6,7 @@
 npx nullbrand
 ```
 
-> **Status: new project, no independent security audit.** It is open source (MIT) and provided "as is", without warranty. For critical data, keep encrypted backups and consider an established, audited password manager. Not affiliated with or endorsed by Bitwarden; "Bitwarden" is only named to describe the import format.
+> **Status: new project, no independent security audit.** It is open source (MIT) and provided "as is", without warranty. For critical data, keep encrypted backups and consider an established, audited password manager. Not affiliated with or endorsed by any other password manager.
 
 The command starts a web interface **on `127.0.0.1` only** and opens your browser. The first time, you create the master password; after that you just unlock.
 
@@ -16,8 +16,9 @@ The command starts a web interface **on `127.0.0.1` only** and opens your browse
 - Logins (username, password, sites, folder, favorite, notes), cards, identities, SSH keys and secure notes
 - Search, filters and folders
 - Password generator with uniform sampling (`crypto.randomInt`)
-- **Bitwarden import** (unencrypted `.json` export — logins, notes and identities; cards become notes)
-- **Encrypted backup** (export and restore/merge)
+- **Import from a `.json` file** (the layout is detected; see [Import and export](#import-and-export))
+- **Export** as an encrypted backup, or as an unencrypted `.json` file
+- **Encrypted backup** (restore/merge)
 - Master password change
 - Full CLI for those who prefer the terminal
 - **English and Portuguese** (`en`, `pt`) in the web interface and the CLI
@@ -42,9 +43,10 @@ npx nullbrand get github --show   # prints the password
 npx nullbrand add                 # adds a login
 npx nullbrand rm github           # removes an item
 npx nullbrand generate -l 32      # generates a password
-npx nullbrand import bitwarden ~/Downloads/bitwarden_export.json
+npx nullbrand import ~/Downloads/passwords.json    # the layout is detected
 npx nullbrand import backup backup.json
-npx nullbrand export backup.json  # encrypted backup
+npx nullbrand export backup.json                   # encrypted backup
+npx nullbrand export out.json --unencrypted        # plain text: asks for the master password
 npx nullbrand passwd              # changes the master password
 npx nullbrand where               # shows where the vault is stored
 ```
@@ -63,6 +65,34 @@ Command-line flags:
 To install permanently: `npm install -g nullbrand` and just use `nullbrand`.
 
 Releases are tagged `vX.Y.Z` and listed in [CHANGELOG.md](CHANGELOG.md). nullbrand never checks for updates.
+
+## Import and export
+
+Both use a `.json` file and say nothing about which app wrote or will read it.
+
+```bash
+npx nullbrand import file.json                    # the layout is detected
+npx nullbrand import file.json --folder Imported  # everything goes into the folder "Imported"
+npx nullbrand import file.json --ignore-folders   # drop the folders written in the file
+```
+
+- **Detection.** The layout of the file is recognised from its structure, never from a name. A file that no layout is sure about fails with "not in a supported format": it is never guessed. An encrypted export from another app is refused with a message to export it again unencrypted.
+- **Folders.** With `--folder Dest`, folders of the file become `Dest/Folder` (a flat name: `/` is a naming convention, not a hierarchy) and items without a folder go directly into `Dest`. With `--ignore-folders` everything goes into `Dest`, or has no folder.
+- **Limits.** 25 MiB per file. The web interface accepts bodies up to 10 MB.
+- **Duplicates** are skipped; existing items are never updated.
+
+In the web interface, *Import and backup → Choose a file…* shows how many items were found, and any warning, before anything is imported.
+
+Export has two choices:
+
+| Output | Protection | Readable by |
+|---|---|---|
+| Backup `.json` | Encrypted with your master password | nullbrand only |
+| `.json` | **Plain text** | anything that can read the nested layout nullbrand writes |
+
+An unencrypted export asks for the master password again and an explicit confirmation (`--i-understand`, or a y/N answer; a checkbox in the web interface), and the file is created with mode `0600`. Delete it as soon as you no longer need it. Fields the layout has no place for (SSH keys, RG, PIS, CNPJ, birth date) are written into the item's notes as `key: value` lines, and the export tells you about them.
+
+Only `.json` is read. Other formats and encrypted databases are not supported: they would need cryptography and parsers that cannot be written on Node's built-ins alone, and the project has no runtime dependencies.
 
 ## Language
 
@@ -135,7 +165,7 @@ src/vault.ts                vault file and item operations
 src/generator.ts            password generator
 src/sshkey.ts               SSH key generation and inspection
 src/clipboard.ts            clipboard with automatic clearing
-src/importers/bitwarden.ts  Bitwarden import
+src/formats/                import / export: adapters, detection, writers
 src/server.ts               local HTTP server and API
 src/cli.ts                  CLI commands
 src/i18n.ts                 language resolution, config.json (Node side)
