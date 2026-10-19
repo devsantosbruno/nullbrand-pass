@@ -1,7 +1,7 @@
 {
   "name": "nullbrand",
   "version": "0.1.0",
-  "description": "100% local, Bitwarden-style password manager (early release, not independently audited). Run it with npx nullbrand.",
+  "description": "100% local, offline password manager with an encrypted vault file (early release, not independently audited). Run it with npx nullbrand.",
   "type": "module",
   "bin": {
     "nullbrand": "dist/bin/nullbrand.js"
@@ -38,7 +38,6 @@
     "vault",
     "offline",
     "local-first",
-    "bitwarden",
     "cli"
   ],
   "author": "Bruno Santos (https://github.com/devsantosbruno)",

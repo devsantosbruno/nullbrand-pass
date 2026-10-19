@@ -1,6 +1,6 @@
 # nullbrand
 
-**100% local** password manager, Bitwarden-style. No account, no cloud, no external server: the vault is an encrypted file on your computer.
+**100% local** password manager. No account, no cloud, no external server: the vault is an encrypted file on your computer.
 
 ```bash
 npx nullbrand
