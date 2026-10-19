@@ -8,7 +8,7 @@ Only the latest published version of `nullbrand` receives security fixes.
 
 Please **do not open a public issue** for security problems.
 
-Report privately through GitHub's "Report a vulnerability" button in the repository's **Security** tab (private vulnerability reporting).
+Report privately through GitHub's "Report a vulnerability" button in the repository's **Security** tab (private vulnerability reporting), or through the contact page at <https://nullbrand.com/#contact>.
 
 Include the version, your OS and Node.js version, and steps to reproduce. You can expect an acknowledgement within 7 days. Fixes are released as a new version and credited to the reporter unless you prefer otherwise.
 
