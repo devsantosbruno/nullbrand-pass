@@ -147,4 +147,4 @@ locales/                    en.json, pt.json (shared by the CLI and the UI)
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The name is covered by the [trademark policy](TRADEMARKS.md); forks should use their own name. Name-conflict review: `docs/trademark-check.md`.

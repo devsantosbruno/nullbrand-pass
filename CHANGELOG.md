@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 - CI on Linux, macOS and Windows, community health files and a release guide.
+- Trademark policy (`TRADEMARKS.md`) and written name-conflict review (`docs/trademark-check.md`).
 
 ### Fixed
 - README pointed to a non-existent `public/i18n.js`; the language list lives in `src/shared/i18n.ts`.

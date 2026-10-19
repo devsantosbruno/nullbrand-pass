@@ -18,6 +18,7 @@
     "!dist/.tsbuildinfo",
     "README.md",
     "LICENSE",
+    "TRADEMARKS.md",
     "SECURITY.md"
   ],
   "scripts": {
