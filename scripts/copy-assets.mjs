@@ -1,11 +1,11 @@
-// Build helper, plain Node (no dependencies).
-//   node scripts/copy-assets.mjs clean   removes dist/ entirely (run BEFORE tsc -b, so nothing stale survives)
-//   node scripts/copy-assets.mjs copy    copies everything tsc does not emit into dist/ (run AFTER tsc -b)
-// Layout produced (the compiled code resolves '../package.json', '../locales/' and '../public/' relative to dist/src/):
-//   dist/package.json            <- package.json (always overwritten, so the version can never be stale)
-//   dist/locales/                <- locales/
-//   dist/public/                 <- static/ (index.html, styles.css, favicon.svg) + the shared modules the browser imports
-//   dist/test/fixtures/          <- test/fixtures/ (the compiled tests read them relative to their own file)
+// Build helper, plain Node.
+//   node scripts/copy-assets.mjs clean   removes dist/ (run before tsc -b so nothing stale survives)
+//   node scripts/copy-assets.mjs copy    copies what tsc does not emit into dist/ (run after tsc -b)
+// The compiled code resolves '../package.json', '../locales/' and '../public/' relative to dist/src/, hence this layout:
+//   dist/package.json   from package.json, always overwritten so the version is never stale
+//   dist/locales/       from locales/
+//   dist/public/        from static/, plus the compiled shared modules the browser imports
+//   dist/test/fixtures/ from test/fixtures/, which the compiled tests read relative to their own file
 import { cp, mkdir, readdir, rm, chmod, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
@@ -35,7 +35,7 @@ if (mode === 'clean') {
   await cp(join(root, 'package.json'), join(dist, 'package.json'));
   await cp(join(root, 'locales'), join(dist, 'locales'), { recursive: true });
   if (await exists(join(root, 'static'))) await cp(join(root, 'static'), join(dist, 'public'), { recursive: true });
-  // The browser imports './i18n.js' (and whatever it imports at runtime) next to app.js: copy every compiled shared module, flat.
+  // The browser imports './i18n.js' and its dependencies next to app.js, so copy every compiled shared module flat.
   const sharedDir = join(dist, 'src', 'shared');
   await mustExist(join(sharedDir, 'i18n.js'), 'compiled shared/i18n.js');
   await mkdir(join(dist, 'public'), { recursive: true });

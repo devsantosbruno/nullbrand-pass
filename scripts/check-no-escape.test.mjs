@@ -138,7 +138,6 @@ test('src/web/: HTML sinks, eval and inline styles fail (and only there)', () =>
     ['n.style.cssText = "color:red";', 'web-inline-style'],
   ];
   for (const [code, rule] of bad) assert.ok(web(code).includes(rule), code);
-  // The same code is fine outside src/web/ (the Node side has no DOM), and the safe forms are fine inside.
   for (const [code] of bad) assert.deepEqual(rules(code, 'src/server.ts').filter((r) => r.startsWith('web-')), [], code);
   const good = [
     'n.textContent = s; n.style.width = "3px"; n.style.setProperty("--w", "3px");',

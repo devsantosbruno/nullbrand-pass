@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-// No third-party product is named: import is by file structure, and the project never positions itself against another product.
-// The pattern is built from pieces so this file does not contain the names it forbids.
+// Built from pieces so this file does not contain the names it forbids.
 const NAMES = new RegExp(['bit' + 'warden', 'pass' + 'bolt', 'kee' + 'pass', '1pass' + 'word', 'last' + 'pass', 'dash' + 'lane'].join('|'), 'i');
 
 function files(dir) {

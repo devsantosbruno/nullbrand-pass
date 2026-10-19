@@ -26,7 +26,7 @@ const JS_FILE = /\.(js|mjs|cjs)$/;
 
 const WEB_FILE = /^src[\\/]web[\\/]/;
 const HTML_SINKS = new Set(['innerHTML', 'outerHTML', 'insertAdjacentHTML']);
-// The name of a property access / property assignment / element access with a string literal (`a.b`, `{ b: 1 }`, `a['b']`).
+/** Returns the member name of `a.b`, `{ b: 1 }` or `a['b']`, else `null`. */
 function memberName(node) {
   if (ts.isPropertyAccessExpression(node)) return node.name.text;
   if (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) return ts.isIdentifier(node.name) || ts.isStringLiteral(node.name) ? node.name.text : null;
@@ -42,7 +42,7 @@ function isConstAssertion(node) {
   return ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && type.typeName.text === 'const' && !type.typeArguments;
 }
 
-// `JSON.parse(x)` or `<expr>.json()` must be the initializer of `const|let name: unknown = [await] ...`.
+// `JSON.parse(x)` and `<expr>.json()` must initialize `const|let name: unknown = [await] ...`.
 function isBoundaryCall(node) {
   const callee = node.expression;
   if (!ts.isPropertyAccessExpression(callee)) return null;
@@ -87,7 +87,7 @@ export function checkSource(fileName, text) {
     }
   }
 
-  // `@ts-` is searched in the raw text on purpose: the directives live in comments.
+  // Searched in the raw text on purpose, since the directives live in comments.
   text.split('\n').forEach((content, i) => {
     if (content.includes('@ts-')) violations.push({ file: fileName, line: i + 1, rule: 'ts-directive', message: 'a "@ts-" directive' });
   });
