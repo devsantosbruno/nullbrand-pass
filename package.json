@@ -14,6 +14,7 @@
   "files": [
     "dist",
     "!dist/test",
+    "!dist/src/web",
     "!dist/**/*.d.ts",
     "!dist/.tsbuildinfo",
     "README.md",
