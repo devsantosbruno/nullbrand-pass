@@ -2,17 +2,18 @@
 // User data is always inserted with textContent (never innerHTML).
 import { createT, resolveLang, normalizeLang, fmtDate as fmtDateIntl, fmtRelative, errText, FALLBACK } from './i18n.js';
 import type { Dict, Lang, Translator, TranslateParams } from './i18n.js';
-import type { ApiResponses, ApiRoute, GenerateRequest, PublicItem, StatusResponse } from './api.js';
+import type { ApiResponses, ApiRoute, ApiWarning, GenerateRequest, ImportPreviewResponse, PublicItem, StatusResponse } from './api.js';
 import {
-  guardBitwardenImportResponse,
   guardClipboardCopyResponse,
   guardConfigResponse,
   guardCountResponse,
   guardDict,
+  guardExportResponse,
   guardFolderDeleteResponse,
   guardFolderList,
   guardFolderNameResponse,
   guardGenerateResponse,
+  guardImportAnswer,
   guardMergeResponse,
   guardOkResponse,
   guardPublicItems,
@@ -21,6 +22,7 @@ import {
   guardStatusResponse,
   guardVaultItem,
   isApiErrorResponse,
+  isImportPreviewResponse,
 } from './api-guards.js';
 import type { Guard } from './api-guards.js';
 import { errorMessage } from './guards.js';
@@ -241,6 +243,8 @@ function showScreen(name: ScreenName): void {
   for (const s of ['nosession', 'setup', 'unlock', 'vault']) $(`#screen-${s}`).hidden = s !== name;
   $('.lang-switch').hidden = name === 'vault'; // only while the vault is locked
   if (name !== 'vault') { clipCountdown(0); $('#view-fields').replaceChildren(); $('#view-ssh-download').replaceChildren(); }
+  // These two dialogs hold a file full of passwords / the master password: closing them drops both (see their 'close' handlers).
+  if (name !== 'vault') for (const d of queryAll(document, '#dlg-import[open], #dlg-export[open]', HTMLDialogElement)) d.close();
   if (name === 'nosession') { $('#nosession-info').hidden = false; $('#nosession-fail').hidden = true; }
   if (name === 'unlock') { $input('#unlock-pass').value = ''; setTimeout(() => $input('#unlock-pass').focus(), 0); }
   if (name === 'setup') setTimeout(() => $input('#setup-pass').focus(), 0);
@@ -1886,41 +1890,176 @@ const toolsMsg = (msg: string | null, ok = false): void => { const m = $('#tools
 $('#btn-tools').addEventListener('click', () => { toolsMsg(''); dlgTools.showModal(); });
 $('#btn-tools-close').addEventListener('click', () => dlgTools.close());
 
-const fileBitwarden = $input('#file-bitwarden');
-fileBitwarden.addEventListener('change', async () => {
-  const file = firstFile(fileBitwarden);
-  if (!file) return;
-  toolsMsg(t('tools.importing'), true);
+// A list of warnings (translated by key + params, like an error) under a dialog's form.
+function renderWarnings(list: HTMLElement, warnings: readonly ApiWarning[]): void {
+  list.replaceChildren(...warnings.map((w) => el('li', { textContent: t(w.key, w.params) })));
+}
+
+// Hands a text (or a blob) to the browser as a download.
+function download(blob: Blob, name: string): void {
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// ---------- Import a file ----------
+// The flow is: choose a file -> the server reads it WITHOUT importing (dry run) and says what it found -> the options can be changed
+// (every change asks again) -> Import.
+const dlgImport = $dialog('#dlg-import');
+const importFile = $input('#import-file');
+const importFolder = $input('#import-folder');
+const importFoldersMode = query(document, '#import-folders-mode', HTMLSelectElement);
+const importRun = $button('#btn-import-run');
+const importMsg = (msg: string | null, ok = false): void => { const m = $('#import-msg'); m.textContent = msg; m.classList.toggle('ok', ok); };
+
+let importText: string | undefined;
+// Answers arrive out of order when the options change quickly: only the latest one is shown.
+let importRequest = 0;
+
+function importBody(extra: object = {}): object {
+  return {
+    text: importText,
+    folder: importFolder.value.trim(),
+    ignoreFolders: importFoldersMode.value === 'ignore',
+    ...extra,
+  };
+}
+
+function showImportPreview(preview: ImportPreviewResponse): void {
+  $('#import-preview').hidden = false;
+  $('#import-found').textContent = t('import.dlg.found', { count: preview.count });
+  renderWarnings($('#import-warnings'), preview.warnings);
+  importRun.disabled = preview.count === 0;
+}
+
+async function importPreview(): Promise<void> {
+  if (importText === undefined) return;
+  const mine = ++importRequest;
+  importMsg(t('import.dlg.reading'), true);
+  importRun.disabled = true;
   try {
-    const r = await api('POST /api/import/bitwarden', { guard: guardBitwardenImportResponse, body: { text: await file.text() } });
-    await refresh();
-    toolsMsg(`${[t('import.added', { count: r.added }), r.skipped && t('import.skipped', { count: r.skipped }), r.ignored && t('import.ignored', { count: r.ignored })].filter(Boolean).join(', ')}. ${t('import.deleteExport')}`, true);
+    const answer = await api('POST /api/import', { guard: guardImportAnswer, body: importBody({ dryRun: true }) });
+    if (mine !== importRequest) return;
+    if (!isImportPreviewResponse(answer)) throw new ApiResponseError('POST /api/import', 'response: expected a preview');
+    importMsg(null);
+    showImportPreview(answer);
   } catch (ex) {
-    toolsMsg(msgOf(ex));
-  } finally {
-    fileBitwarden.value = '';
+    if (mine !== importRequest) return;
+    $('#import-preview').hidden = true;
+    importMsg(msgOf(ex));
+  }
+}
+
+$('#btn-import-open').addEventListener('click', () => {
+  importText = undefined;
+  importFile.value = '';
+  importFolder.value = '';
+  $('#import-preview').hidden = true;
+  importRun.disabled = true;
+  importMsg(null);
+  $('#import-folder-list').replaceChildren(...state.folders.map((f) => el('option', { value: f })));
+  dlgTools.close();
+  dlgImport.showModal();
+});
+$('#btn-import-close').addEventListener('click', () => dlgImport.close());
+dlgImport.addEventListener('close', () => { importText = undefined; });
+
+importFile.addEventListener('change', async () => {
+  const file = firstFile(importFile);
+  importText = file ? await file.text() : undefined;
+  if (importText === undefined) {
+    $('#import-preview').hidden = true;
+    importRun.disabled = true;
+    return;
+  }
+  await importPreview();
+});
+importFoldersMode.addEventListener('change', importPreview);
+importFolder.addEventListener('change', importPreview);
+
+importRun.addEventListener('click', async () => {
+  if (importText === undefined) return importMsg(t('import.dlg.chooseFile'));
+  importRun.disabled = true;
+  importMsg(t('tools.importing'), true);
+  try {
+    const result = await api('POST /api/import', { guard: guardImportAnswer, body: importBody() });
+    if (isImportPreviewResponse(result)) throw new ApiResponseError('POST /api/import', 'response: expected a result');
+    await refresh();
+    importText = undefined;
+    importFile.value = '';
+    dlgImport.close();
+    const summary = [t('import.added', { count: result.added }), result.skipped && t('import.skipped', { count: result.skipped }), result.ignored && t('import.ignored', { count: result.ignored })].filter(Boolean).join(', ');
+    toast(`${summary}. ${t('import.deleteExport')}`, 6000);
+  } catch (ex) {
+    importRun.disabled = false;
+    importMsg(msgOf(ex));
   }
 });
 
-// The backup is a file, not JSON for the UI to read: it does not go through api(), and the answer is handed to the browser as it is.
-$('#btn-export').addEventListener('click', async () => {
+// ---------- Export ----------
+const dlgExport = $dialog('#dlg-export');
+const exportProtection = query(document, '#export-protection', HTMLSelectElement);
+const exportConfirm = $input('#export-confirm');
+const exportPassword = $input('#export-password');
+const exportMsg = (msg: string | null, ok = false): void => { const m = $('#export-msg'); m.textContent = msg; m.classList.toggle('ok', ok); };
+
+// Encrypted is the native backup, readable only by nullbrand; unencrypted is a JSON file any app can be pointed at.
+function renderExportChoices(): void {
+  const plain = exportProtection.value === 'plain';
+  $('#export-plain').hidden = !plain;
+  renderWarnings($('#export-warnings'), []);
+  // What the plain file cannot hold, counted from the items already on screen.
+  const ssh = state.items.filter((i) => i.type === 'ssh').length;
+  $('#export-note').textContent = !plain ? t('export.dlg.encryptedNote') : ssh > 0 ? t('export.dlg.lossyJson', { count: ssh }) : '';
+}
+
+$('#btn-export-open').addEventListener('click', () => {
+  exportProtection.value = 'encrypted';
+  renderExportChoices();
+  exportMsg(null);
+  dlgTools.close();
+  dlgExport.showModal();
+});
+$('#btn-export-close').addEventListener('click', () => dlgExport.close());
+dlgExport.addEventListener('close', () => {
+  exportPassword.value = '';
+  exportConfirm.checked = false;
+});
+exportProtection.addEventListener('change', renderExportChoices);
+
+// The encrypted backup is a file, not JSON for the UI to read: it does not go through api(), and the answer is handed to the browser as it is.
+async function exportBackup(): Promise<void> {
+  const res = await fetch('/api/export/backup');
+  if (!res.ok) {
+    const answer = await readJson(res);
+    const d = isApiErrorResponse(answer) ? answer : { key: undefined, params: undefined, error: undefined };
+    throw new Error(errText(t, { key: d.key, params: d.params, message: d.error }) || t('tools.export.failed'));
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'nullbrand-backup.json';
+  download(await res.blob(), name);
+  exportMsg(t('tools.export.done'), true);
+}
+
+async function exportPlain(): Promise<void> {
+  if (!exportConfirm.checked) return exportMsg(t('export.dlg.needConfirm'));
+  if (!exportPassword.value) return exportMsg(t('export.dlg.needPassword'));
+  const file = await api('POST /api/export', { guard: guardExportResponse, body: { password: exportPassword.value, confirm: true } });
+  exportPassword.value = '';
+  exportConfirm.checked = false;
+  download(new Blob([file.text], { type: file.mime }), file.filename);
+  renderWarnings($('#export-warnings'), file.warnings);
+  exportMsg(t('export.deleteAfter'), true);
+}
+
+$('#btn-export-run').addEventListener('click', async () => {
+  exportMsg(null);
   try {
-    const res = await fetch('/api/export/backup');
-    if (!res.ok) {
-      const answer = await readJson(res);
-      const d = isApiErrorResponse(answer) ? answer : { key: undefined, params: undefined, error: undefined };
-      throw new Error(errText(t, { key: d.key, params: d.params, message: d.error }) || t('tools.export.failed'));
-    }
-    const blob = await res.blob();
-    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'nullbrand-backup.json';
-    const a = el('a', { href: URL.createObjectURL(blob), download: name });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    toolsMsg(t('tools.export.done'), true);
+    if (exportProtection.value === 'plain') await exportPlain();
+    else await exportBackup();
   } catch (ex) {
-    toolsMsg(msgOf(ex));
+    exportMsg(msgOf(ex));
   }
 });
 

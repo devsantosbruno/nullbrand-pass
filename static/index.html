@@ -310,15 +310,15 @@
       <h2 data-i18n="tools.title"></h2>
 
       <section class="tool">
-        <h3 data-i18n="tools.bw.title"></h3>
-        <p class="muted small" data-i18n="tools.bw.help"></p>
-        <input type="file" id="file-bitwarden" accept=".json,application/json">
+        <h3 data-i18n="tools.import.title"></h3>
+        <p class="muted small" data-i18n="tools.import.help"></p>
+        <button class="btn ghost" id="btn-import-open" data-i18n="tools.import.button"></button>
       </section>
 
       <section class="tool">
         <h3 data-i18n="tools.export.title"></h3>
         <p class="muted small" data-i18n="tools.export.help"></p>
-        <button class="btn ghost" id="btn-export" data-i18n="tools.export.button"></button>
+        <button class="btn ghost" id="btn-export-open" data-i18n="tools.export.button"></button>
       </section>
 
       <section class="tool">
@@ -333,6 +333,62 @@
       <div class="actions">
         <span class="grow"></span>
         <button class="btn ghost" id="btn-tools-close" data-i18n="common.close"></button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Import a file -->
+  <dialog id="dlg-import">
+    <div class="dialog-body">
+      <h2 data-i18n="import.dlg.title"></h2>
+      <label><span data-i18n="import.dlg.file"></span> <input type="file" id="import-file" accept=".json,application/json"></label>
+      <label><span data-i18n="import.dlg.folders"></span>
+        <select id="import-folders-mode">
+          <option value="keep" data-i18n="import.dlg.folders.keep"></option>
+          <option value="ignore" data-i18n="import.dlg.folders.ignore"></option>
+        </select>
+      </label>
+      <label><span data-i18n="import.dlg.folder"></span> <input type="text" id="import-folder" list="import-folder-list" maxlength="200" autocomplete="off"></label>
+      <datalist id="import-folder-list"></datalist>
+
+      <section class="tool" id="import-preview" hidden>
+        <p id="import-found"></p>
+        <ul class="warn-list" id="import-warnings"></ul>
+      </section>
+
+      <p class="error" id="import-msg" role="status"></p>
+      <div class="actions">
+        <span class="grow"></span>
+        <button class="btn ghost" id="btn-import-close" data-i18n="common.close"></button>
+        <button class="btn primary" id="btn-import-run" data-i18n="import.dlg.run" disabled></button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Export -->
+  <dialog id="dlg-export">
+    <div class="dialog-body">
+      <h2 data-i18n="export.dlg.title"></h2>
+      <label><span data-i18n="export.dlg.protection"></span>
+        <select id="export-protection">
+          <option value="encrypted" data-i18n="export.dlg.protection.encrypted"></option>
+          <option value="plain" data-i18n="export.dlg.protection.plain"></option>
+        </select>
+      </label>
+      <p class="muted small" id="export-note"></p>
+
+      <section class="tool" id="export-plain" hidden>
+        <p class="warn-box" role="alert" data-i18n="export.warning"></p>
+        <label class="check"><input type="checkbox" id="export-confirm"> <span data-i18n="export.dlg.confirm"></span></label>
+        <input type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" id="export-password" data-i18n-placeholder="export.dlg.password" data-i18n-aria="export.dlg.password" autocomplete="off">
+      </section>
+
+      <ul class="warn-list" id="export-warnings"></ul>
+      <p class="error" id="export-msg" role="status"></p>
+      <div class="actions">
+        <span class="grow"></span>
+        <button class="btn ghost" id="btn-export-close" data-i18n="common.close"></button>
+        <button class="btn primary" id="btn-export-run" data-i18n="export.dlg.run"></button>
       </div>
     </div>
   </dialog>
