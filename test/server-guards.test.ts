@@ -18,6 +18,7 @@ interface Ctx {
 }
 
 const BIN = fileURLToPath(new URL('../bin/nullbrand.js', import.meta.url));
+const skipOnWindows = process.platform === 'win32' ? 'POSIX only' : false;
 
 async function withServer(fn: (ctx: Ctx) => Promise<void>) {
   const dir = await mkdtemp(join(tmpdir(), 'nb-srv5b-'));
@@ -113,7 +114,7 @@ test('bin: refuses Node older than 22.14 with the same message as before, and ru
   }
 });
 
-test('bin is executable and starts with the node shebang', () => {
+test('bin is executable and starts with the node shebang', { skip: skipOnWindows }, () => {
   const out = execFileSync(BIN, ['--version'], { encoding: 'utf8' });
   assert.match(out, /^\d+\.\d+\.\d+/);
 });

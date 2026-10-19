@@ -9,6 +9,7 @@ import type { ErrorSource } from '../src/stdio.js';
 import { fileURLToPath } from 'node:url';
 
 const BIN = fileURLToPath(new URL('../bin/nullbrand.js', import.meta.url));
+const skipOnWindows = process.platform === 'win32' ? 'POSIX only' : false;
 
 function pipeClosed(args: string, redirect: string) {
   const home = mkdtempSync(join(tmpdir(), 'nb-epipe-'));
@@ -21,13 +22,13 @@ function pipeClosed(args: string, redirect: string) {
   return { shell: r, code: readFileSync(codeFile, 'utf8').trim() };
 }
 
-test('stdout closed by the reader: exit 0, no stack trace', () => {
+test('stdout closed by the reader: exit 0, no stack trace', { skip: skipOnWindows }, () => {
   const r = pipeClosed('help', '2>' + join(tmpdir(), `nb-epipe-err-${process.pid}`));
   assert.equal(r.code, '0');
   assert.equal(readFileSync(join(tmpdir(), `nb-epipe-err-${process.pid}`), 'utf8'), '');
 });
 
-test('stderr closed by the reader: exit 0, no stack trace', () => {
+test('stderr closed by the reader: exit 0, no stack trace', { skip: skipOnWindows }, () => {
   const r = pipeClosed('--no-such-flag help', '2>&1 >/dev/null');
   assert.equal(r.code, '0');
   assert.equal(r.shell.stderr, '');
