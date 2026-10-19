@@ -16,7 +16,10 @@ import { createClipboard } from '../src/clipboard.js';
 import type { Backend } from '../src/clipboard.js';
 import { readBackupItemsFromText } from '../src/vault.js';
 import {
-  guardBitwardenImportResponse,
+  guardExportResponse,
+  guardImportAnswer,
+  guardImportResponse,
+  isImportPreviewResponse,
   guardClipboardCopyResponse,
   guardConfigResponse,
   guardCountResponse,
@@ -177,7 +180,8 @@ async function walk(api: Api, { password, existing, thorough, expectedItems }: {
   await api.error('POST /api/ssh/inspect', 400, { body: { privateKey: 'garbage' } });
   for (const route of [
     'GET /api/items', 'GET /api/items/:id', 'POST /api/items', 'PUT /api/items/:id', 'DELETE /api/items/:id', 'POST /api/items/bulk', 'GET /api/folders',
-    'POST /api/clipboard/copy', 'POST /api/import/bitwarden', 'POST /api/import/backup', 'GET /api/export/backup', 'POST /api/password',
+    'POST /api/clipboard/copy', 'POST /api/import', 'POST /api/import/backup', 'GET /api/export/backup', 'POST /api/export',
+    'POST /api/password',
   ]) {
     await api.error(route, 423, { id: 'x', body: {} });
   }
@@ -265,10 +269,26 @@ async function walk(api: Api, { password, existing, thorough, expectedItems }: {
   assert.equal(odd.bits, (await api.ok('POST /api/generate', guardGenerateResponse, { body: { length: 20 } })).bits);
 
   // ---- imports and export ----
-  const bitwarden = { encrypted: false, folders: [], items: [{ type: 1, name: 'Imported', login: { username: 'a', password: 'b' } }, { type: 5, name: 'Unsupported' }] };
-  const imported = await api.ok('POST /api/import/bitwarden', guardBitwardenImportResponse, { body: { text: JSON.stringify(bitwarden) } });
+  const nested = JSON.stringify({ encrypted: false, folders: [], items: [{ type: 1, name: 'Imported', login: { username: 'a', password: 'b' } }, { type: 5, name: 'Unsupported' }] });
+  const body = { text: nested, folder: 'Imported' };
+  const preview = await api.ok('POST /api/import', guardImportAnswer, { body: { ...body, dryRun: true } });
+  assert.ok(isImportPreviewResponse(preview) && preview.count === 1 && preview.ignored === 1);
+  assert.ok(!(await api.ok('GET /api/folders', guardFolderList)).includes('Imported'), 'a dry run changes nothing');
+  const imported = await api.ok('POST /api/import', guardImportResponse, { body });
   assert.deepEqual([imported.added, imported.skipped, imported.ignored], [1, 0, 1]);
-  await api.error('POST /api/import/bitwarden', 400, { body: { text: 'not json' } });
+  assert.ok((await api.ok('GET /api/folders', guardFolderList)).includes('Imported'));
+  const again = await api.ok('POST /api/import', guardImportResponse, { body });
+  assert.deepEqual([again.added, again.skipped], [0, 1]);
+  await api.error('POST /api/import', 400, { body: { text: 'not json' } });
+  await api.error('POST /api/import', 400, { body: { text: '{"items": "no"}' } });
+
+  // The unencrypted export asks for the master password again and an explicit confirmation.
+  await api.error('POST /api/export', 400, { body: { password } });
+  await api.error('POST /api/export', 401, { body: { password: 'wrong-wrong-wrong', confirm: true } });
+  const plain = await api.ok('POST /api/export', guardExportResponse, { body: { password, confirm: true } });
+  assert.match(plain.filename, /^nullbrand-export-\d{4}-\d{2}-\d{2}\.json$/);
+  const reread = await api.ok('POST /api/import', guardImportAnswer, { body: { text: plain.text, dryRun: true } });
+  assert.ok(isImportPreviewResponse(reread) && reread.count > 0, 'what the server exports, the server imports');
   const backup = await api.call('GET /api/export/backup');
   assert.equal(backup.status, 200);
   assert.match(backup.contentDisposition ?? '', /attachment; filename="nullbrand-backup-\d{4}-\d{2}-\d{2}\.json"/);

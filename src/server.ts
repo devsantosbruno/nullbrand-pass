@@ -7,17 +7,18 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join, extname, normalize, basename } from 'node:path';
 import { coded } from './errors.js';
-import { Vault, vaultExists, destroyVault, defaultVaultPath, readBackupItemsFromText, defaultHome } from './vault.js';
+import { Vault, vaultExists, destroyVault, defaultVaultPath, readBackupItemsFromText, defaultHome, verifyMasterPassword } from './vault.js';
 import { generatePassword, entropyBits } from './generator.js';
 import { generateSshKey, inspectSshKey } from './sshkey.js';
-import { parseBitwardenExport } from './importers/bitwarden.js';
+import { planImport, exportPlain } from './formats/index.js';
+import type { ImportOptions, ImportPlan } from './formats/index.js';
 import { randomToken, safeEqual } from './crypto.js';
 import { createClipboard, ClipboardError, DEFAULT_TTL_MS, type Clipboard } from './clipboard.js';
 import { SUPPORTED, normalizeLang, resolveForProcess, saveLang, translator, errText, LOCALES_DIR } from './i18n.js';
 import { hasErrorCode, isObjectLike, isUnknownArray } from './shared/guards.js';
 import { isLang, isTranslateParams, type TranslateParams } from './shared/i18n.js';
 import type { VaultItem } from './shared/vault-types.js';
-import type { ApiErrorResponse, ApiResponses, ApiRoute, PublicItem } from './shared/api.js';
+import type { ApiErrorResponse, ApiResponses, ApiRoute, ImportPreviewResponse, ImportResponse, PublicItem } from './shared/api.js';
 
 const BOOTSTRAP_TTL_MS = 60_000;
 const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -68,6 +69,21 @@ function fromErr(status: number, err: unknown): HttpError {
 function bodyFields(body: unknown): Readonly<Record<string, unknown>> {
   if (body === null) throw new HttpError(400, 'Invalid JSON.', 'err.http.invalidJson');
   return isObjectLike(body) ? body : {};
+}
+
+// The options of POST /api/import, read field by field from the (untrusted) body.
+function importOptions(fields: Readonly<Record<string, unknown>>, existingFolders: readonly string[]): ImportOptions {
+  const folder = fields['folder'];
+  return { ...(typeof folder === 'string' && { folder }), ignoreFolders: fields['ignoreFolders'] === true, existingFolders };
+}
+
+function preview(plan: ImportPlan): ImportPreviewResponse {
+  return { count: plan.items.length, ignored: plan.ignored, warnings: plan.warnings };
+}
+
+async function commit(vault: Vault, plan: ImportPlan): Promise<ImportResponse> {
+  const result = await vault.merge(plan.items);
+  return { ...result, ignored: plan.ignored, warnings: plan.warnings };
 }
 
 function publicItem(item: VaultItem): PublicItem {
@@ -411,11 +427,11 @@ export function startServer({
 
     'POST /api/generate': ({ body }) => ({ password: generatePassword(body), bits: entropyBits(body) }),
 
-    'POST /api/import/bitwarden': async ({ body }) => {
+    'POST /api/import': async ({ body }) => {
       const v = requireVault();
-      const { items, ignored } = parseBitwardenExport(String(bodyFields(body)['text'] || ''));
-      const result = await v.merge(items);
-      return { ...result, ignored };
+      const fields = bodyFields(body);
+      const plan = planImport(String(fields['text'] || ''), importOptions(fields, v.listFolders()));
+      return fields['dryRun'] === true ? preview(plan) : commit(v, plan);
     },
 
     'POST /api/import/backup': async ({ body }) => {
@@ -439,6 +455,24 @@ export function startServer({
         'Content-Disposition': `attachment; filename="nullbrand-backup-${date}.json"`,
       });
       return undefined;
+    },
+
+    // An unencrypted export puts every password on disk in the clear, so it asks for the master password again and an explicit confirmation.
+    'POST /api/export': async ({ body }) => {
+      const v = requireVault();
+      const fields = bodyFields(body);
+      if (fields['confirm'] !== true) throw new HttpError(400, 'Confirm that you understand the file is not encrypted.', 'err.export.confirmRequired');
+      try {
+        await verifyMasterPassword(String(fields['password'] || ''), vaultPath);
+      } catch (err) {
+        if (hasErrorCode(err, 'WRONG_PASSWORD')) {
+          await sleep(800);
+          throw fromErr(401, err);
+        }
+        throw err;
+      }
+      const { filename, mime, text, warnings } = exportPlain(v.items, v.listFolders());
+      return { filename, mime, text, warnings };
     },
 
     'POST /api/password': async ({ body }) => {

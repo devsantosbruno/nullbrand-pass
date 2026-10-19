@@ -53,8 +53,8 @@ test('local API: session, Host/Origin, full flow', async () => {
     assert.ok(typeof genPassword === 'string');
     assert.equal(genPassword.length, 32);
 
-    const bw = { encrypted: false, items: [{ type: 1, name: 'Imported', login: { username: 'a', password: 'b' } }] };
-    const imp = await jsonRecord(await call('POST', '/api/import/bitwarden', { text: JSON.stringify(bw) }));
+    const nested = { encrypted: false, items: [{ type: 1, name: 'Imported', login: { username: 'a', password: 'b' } }] };
+    const imp = await jsonRecord(await call('POST', '/api/import', { text: JSON.stringify(nested) }));
     assert.equal(imp['added'], 1);
 
     const bulkIds = (await jsonRecords(await call('GET', '/api/items'))).map((i) => i['id']);
