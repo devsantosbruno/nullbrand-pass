@@ -44,21 +44,21 @@ test('voice: no exclamation marks and no emoji in either language', () => {
 });
 
 test('t(): interpolation, fallback to en, then the key itself', () => {
-  const dicts = { en: { 'a.hello': 'Hello {name}', 'a.onlyEn': 'only en' }, pt: { 'a.hello': 'Olá {name}' } };
+  const dicts = { en: { 'a.hello': 'Hello {name}', 'a.onlyEn': 'only en' }, pt: { 'a.hello': 'Hello there {name}' } };
   const t = createT('pt', dicts);
-  assert.equal(t('a.hello', { name: 'Ana' }), 'Olá Ana');
+  assert.equal(t('a.hello', { name: 'Ana' }), 'Hello there Ana');
   assert.equal(t('a.onlyEn'), 'only en', 'missing in pt -> en');
   assert.equal(t('a.nowhere'), 'a.nowhere', 'missing in both -> the key');
-  assert.equal(t('a.hello'), 'Olá {name}', 'a missing param keeps the placeholder');
+  assert.equal(t('a.hello'), 'Hello there {name}', 'a missing param keeps the placeholder');
   assert.equal(createT('en', dicts)('a.hello', { name: 'Ann' }), 'Hello Ann');
 });
 
 test('t(): plurals via Intl.PluralRules', () => {
-  const dicts = { en: { 'x_one': '{count} item', 'x_other': '{count} items' }, pt: { 'x_one': '{count} item', 'x_other': '{count} itens' } };
+  const dicts = { en: { 'x_one': '{count} item', 'x_other': '{count} items' }, pt: { 'x_one': '{count} thing', 'x_other': '{count} things' } };
   assert.equal(createT('en', dicts)('x', { count: 1 }), '1 item');
   assert.equal(createT('en', dicts)('x', { count: 2 }), '2 items');
-  assert.equal(createT('pt', dicts)('x', { count: 0 }), '0 item', 'pt treats 0 as singular');
-  assert.equal(createT('pt', dicts)('x', { count: 5 }), '5 itens');
+  assert.equal(createT('pt', dicts)('x', { count: 0 }), '0 thing', 'pt treats 0 as singular');
+  assert.equal(createT('pt', dicts)('x', { count: 5 }), '5 things');
   const real = createT('pt', { en, pt });
   assert.equal(real('delete.done', { count: 3 }), '3 itens apagados');
 });

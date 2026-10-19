@@ -121,6 +121,6 @@ test('fixture nested.json: both logins come in, with and without a folder, and t
   const plan = planImport(readFileSync(new URL('./fixtures/nested.json', import.meta.url), 'utf8'));
   assert.deepEqual([plan.items.length, plan.ignored, plan.warnings], [2, 0, []]);
   const [withFolder, without] = plan.items.map(login);
-  assert.deepEqual([withFolder?.name, withFolder?.folder, withFolder?.username, withFolder?.password, withFolder?.createdAt], ['Teste', 'pasta teste', 'testeee', 'senha teste', '2026-10-19T01:13:19.433Z']);
-  assert.deepEqual([without?.name, without?.folder, without?.uris], ['teste sem pasta', '', []]);
+  assert.deepEqual([withFolder?.name, withFolder?.folder, withFolder?.username, withFolder?.password, withFolder?.createdAt], ['Test', 'test folder', 'testtt', 'test password', '2026-10-19T01:13:19.433Z']);
+  assert.deepEqual([without?.name, without?.folder, without?.uris], ['test without folder', '', []]);
 });

@@ -5,7 +5,7 @@ import { at } from './support.js';
 
 test('ssh names: slug and key file name', () => {
   assert.equal(sshSlug('Prod box'), 'prod-box');
-  assert.equal(sshSlug('Servidor São Paulo #1'), 'servidor-sao-paulo-1');
+  assert.equal(sshSlug('Café Server #1'), 'cafe-server-1');
   assert.equal(sshSlug('  ---  '), 'server', 'nothing left after cleaning falls back to "server"');
   assert.equal(sshFileName('Prod box', 'ed25519'), 'id_ed25519_prod-box');
   assert.equal(sshFileName('Prod box', 'rsa4096'), 'id_rsa_prod-box');
