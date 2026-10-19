@@ -1,11 +1,10 @@
-// Every icon of the page. Drawn as DOM nodes (createElementNS), never from an SVG string (S1).
-// A part is a path (`M...`), `circle:cx,cy,r` or `rect:x,y,width,height,rx`. Two families live here on purpose: the "content" icons
-// (viewer, editor buttons: 18px, stroke 1.5) and the "chrome" icons of the sidebar/list/dialogs (16px or 14px, stroke 2). Where the same
-// idea exists in both (star, shield, eye...) the geometry is not the same, and every place keeps the one it has always shown.
+// Every icon of the page, drawn as DOM nodes (createElementNS), never from an SVG string.
+// A part is a path (`M...`), `circle:cx,cy,r` or `rect:x,y,width,height,rx`. Two families coexist on purpose: "content" icons (viewer and
+// editor buttons: 18px, stroke 1.5) and "chrome" icons (sidebar, list, dialogs: 16px or 14px, stroke 2). Where both have the same idea
+// (star, shield, eye...) the geometry differs and each place keeps its own.
 import { DomValueError, data } from '../dom.js';
 
 const ICONS = {
-  // content
   copy: ['M9 9h10v10H9z', 'M5 15V5h10'],
   eye: ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z', 'circle:12,12,3'],
   'eye-off': ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z', 'circle:12,12,3', 'M4 4l16 16'],
@@ -40,9 +39,11 @@ const ICONS = {
   'eye-off-wide': ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z', 'circle:12,12,3', 'M3 3l18 18'],
   pen: ['M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'],
 } as const;
+/** Name of a drawable icon. */
 export type IconName = keyof typeof ICONS;
 const isIconName = (name: string): name is IconName => Object.hasOwn(ICONS, name);
 
+/** Overrides for {@link icon}. */
 export interface IconOptions {
   size?: number;
   strokeWidth?: number;
@@ -51,7 +52,6 @@ export interface IconOptions {
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-// The attribute names of the non-path parts, in the order their values are written after the colon.
 const SHAPES = { 'circle:': ['circle', ['cx', 'cy', 'r']], 'rect:': ['rect', ['x', 'y', 'width', 'height', 'rx']] } as const;
 function part(spec: string): SVGElement {
   for (const [prefix, [tag, names]] of Object.entries(SHAPES)) {
@@ -66,6 +66,7 @@ function part(spec: string): SVGElement {
   return path;
 }
 
+/** Builds an `<svg>` for an icon. Defaults: 18px, stroke 1.5, outline only. */
 export function icon(name: IconName, { size = 18, strokeWidth = 1.5, filled = false, className }: IconOptions = {}): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   for (const [k, v] of Object.entries({ width: size, height: size, viewBox: '0 0 24 24', fill: filled ? 'currentColor' : 'none', stroke: 'currentColor', 'stroke-width': strokeWidth, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(k, String(v));
@@ -74,14 +75,14 @@ export function icon(name: IconName, { size = 18, strokeWidth = 1.5, filled = fa
   return svg;
 }
 
-// The icon named by a data-icon attribute.
+/** Returns the icon named by the node's `data-icon`. @throws {DomValueError} for an unknown name. */
 export function iconNameOf(node: HTMLElement): IconName {
   const name = data(node, 'icon');
   if (!isIconName(name)) throw new DomValueError('data-icon is not a known icon');
   return name;
 }
 
-// A number in a data-* attribute of the HTML.
+// Reads a positive number from a data-* attribute, or `fallback` when absent.
 function numberOf(node: HTMLElement, name: string, fallback: number): number {
   const raw = node.dataset[name];
   if (raw === undefined) return fallback;
@@ -90,8 +91,11 @@ function numberOf(node: HTMLElement, name: string, fallback: number): number {
   return n;
 }
 
-// Replaces every `<i data-icon-slot="name" data-icon-size data-icon-stroke data-icon-class>` of the static HTML with the icon (the
-// <svg> takes the slot's place, so the DOM ends up as if the markup had been written inline). An unknown name throws.
+/**
+ * Replaces every `<i data-icon-slot="name" data-icon-size data-icon-stroke data-icon-class>` under `root` with the icon; the `<svg>` takes the
+ * slot's place, as if written inline.
+ * @throws {DomValueError} for an unknown icon name.
+ */
 export function applyIcons(root: ParentNode): void {
   for (const slot of root.querySelectorAll('[data-icon-slot]')) {
     if (!(slot instanceof HTMLElement)) throw new DomValueError('[data-icon-slot] on an element that is not HTML');

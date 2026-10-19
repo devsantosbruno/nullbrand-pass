@@ -6,16 +6,17 @@ import { api, msgOf } from '../http.js';
 import { t } from '../locale.js';
 import { copy } from '../clipboard.js';
 
+/** What the generator exposes to the page. */
 export interface GeneratorHandle {
-  // `onUse` makes the "Use" button appear; it receives the password shown.
+  /** Opens the dialog. `onUse` makes the "Use" button appear and receives the password shown. */
   open(onUse?: (password: string) => void): void;
-  // A language change while the dialog is open: the strength line is generated again in the new language.
+  /** Regenerates the strength line in the new language, if the dialog is open. */
   repaint(): void;
 }
 
 const clampLen = (v: string | number): number => Math.max(8, Math.min(128, Math.round(Number(v)) || 20));
 
-// Colors each character: digits in pink, symbols in green. textContent remains the plain password.
+// Colors digits and symbols; the element's textContent stays the plain password.
 function renderGen(password: string): void {
   const out = $('#gen-output');
   out.textContent = '';
@@ -25,6 +26,7 @@ function renderGen(password: string): void {
   }
 }
 
+/** Wires the generator dialog and returns its handle. */
 export function initGenerator(): GeneratorHandle {
   const dlg = $dialog('#dlg-generator');
   let useCallback: ((password: string) => void) | null = null;
@@ -66,13 +68,13 @@ export function initGenerator(): GeneratorHandle {
     }
     void regen();
   });
-  // When leaving the numeric field, fixes out-of-range values.
+  // Leaving the numeric field fixes out-of-range values.
   lenNum.addEventListener('change', () => {
     lenNum.value = String(clampLen(lenNum.value));
     length.value = lenNum.value;
     void regen();
   });
-  // Enter in an input triggers the form's implicit submit (method=dialog) and would close the modal
+  // Enter in an input would trigger the form's implicit submit (method=dialog) and close the modal.
   dlg.addEventListener('keydown', (e) => {
     const target = e.target;
     if (e.key === 'Enter' && target instanceof HTMLInputElement) {

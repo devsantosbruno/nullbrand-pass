@@ -1,4 +1,4 @@
-// The security menu of the sidebar and what it opens: change the master password, quit, delete the vault.
+// The sidebar's security menu and what it opens: change the master password, quit, delete the vault.
 import { guardOkResponse, guardShutdownAck } from '../api-guards.js';
 import { $, $button, $dialog, $input, el, query } from '../dom.js';
 import { api, msgOf } from '../http.js';
@@ -10,6 +10,7 @@ import { confirm } from '../ui/dialog.js';
 import { createMenu } from '../ui/menu.js';
 import { statusLine } from '../ui/status-line.js';
 
+/** Wires the security menu and its dialogs. */
 export function initSecurity(): void {
   const dlgPassword = $dialog('#dlg-password');
   const dlgDestroy = $dialog('#dlg-destroy');
@@ -17,14 +18,14 @@ export function initSecurity(): void {
   const secBtn = $button('#btn-security');
   const secItems = $('#security-items');
   const placeSecMenu = (): void => {
-    // the body uses CSS zoom: position:fixed coordinates are multiplied by it
+    // The body uses CSS zoom, which scales position:fixed coordinates.
     const z = parseFloat(getComputedStyle(document.body).zoom) || 1;
     const r = secBtn.getBoundingClientRect();
     secItems.style.left = `${(r.right + 4) / z}px`;
     secItems.style.top = 'auto';
     secItems.style.bottom = `${(window.innerHeight - r.bottom) / z}px`;
   };
-  // The Esc of this menu is not stopped: it still reaches the page (as it always has).
+  // Esc is deliberately not stopped, so it still reaches the page.
   const secMenu = createMenu({ trigger: secBtn, menu: secItems, itemSelector: '[role=menuitem]', place: placeSecMenu, onResize: 'place', keyScope: $('#security-menu'), stopEscape: false });
   secItems.addEventListener('click', (e) => { if (e.target instanceof HTMLAnchorElement) secMenu.close(); });
   $('#btn-open-pw').addEventListener('click', () => { secMenu.close(); pwMsg(''); dlgPassword.showModal(); });

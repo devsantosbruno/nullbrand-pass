@@ -1,12 +1,16 @@
-// Everything about how an SSH key pair is written out: the public line, file names, the suggested ~/.ssh/config entry and the .zip that
-// carries both files. Pure: no DOM (the download itself is ui/download.ts), so it can be tested on its own.
+// How an SSH key pair is written out: the public line, file names, the suggested ~/.ssh/config entry and the .zip carrying both files.
+// Pure, with no DOM, so it can be tested on its own.
 
+/** Display names of the supported algorithms. */
 export const SSH_ALGOS: Readonly<Record<string, string>> = { ed25519: 'Ed25519', rsa4096: 'RSA 4096' };
+/** Returns the public key line, with the title as its comment when there is one. */
 export const sshPubLine = (pub: string, title: string): string => (title ? `${pub} ${title}` : pub);
+/** Turns a name into a lowercase ASCII slug for host aliases and file names; `server` if nothing is left. */
 export const sshSlug = (v: string): string => v.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'server';
+/** Returns the private key file name following the ssh-keygen convention (`id_ed25519_<slug>`). */
 export const sshFileName = (name: string, algo: string): string => `id_${algo === 'rsa4096' ? 'rsa' : 'ed25519'}_${sshSlug(name)}`;
 
-// Suggested entry for ~/.ssh/config; the key file follows the ssh-keygen naming convention.
+/** Returns a suggested `~/.ssh/config` entry. Port 22 is omitted as the default. */
 export function sshConfig({ name = '', sshAlgo = 'ed25519', sshHost = '', sshUser = '', sshPort = '' }: { name?: string; sshAlgo?: string; sshHost?: string; sshUser?: string; sshPort?: string }): string {
   const alias = sshSlug(name);
   const file = `~/.ssh/${sshFileName(name, sshAlgo)}`;
@@ -20,8 +24,7 @@ export function sshConfig({ name = '', sshAlgo = 'ed25519', sshHost = '', sshUse
   ].filter(Boolean).join('\n');
 }
 
-// Uncompressed ZIP, hand-written (no dependencies). The Unix mode goes in the external
-// attributes so that `unzip` restores the private key with 600 right away.
+// Hand-written uncompressed ZIP. The Unix mode goes in the external attributes so `unzip` restores the private key as 600.
 const CRC_TABLE: readonly number[] = Array.from({ length: 256 }, (_, n) => {
   for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1;
   return n >>> 0;
@@ -31,14 +34,15 @@ const crc32 = (bytes: Uint8Array): number => {
   for (const b of bytes) c = (CRC_TABLE[(c ^ b) & 0xff] ?? 0) ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 };
-// [offset, value, size in bytes] of one little-endian field of a ZIP header.
+// One little-endian ZIP header field: [offset, value, size in bytes].
 type ZipField = readonly [number, number, number];
+/** One file to place in the archive; `mode` is its Unix permission bits. */
 export interface ZipFile {
   name: string;
   text: string;
   mode: number;
 }
-// The pieces of the archive, in order: join them (new Blob(parts)) to get the file. `now` is the modification time of every entry.
+/** Returns the archive as ordered pieces; join them with `new Blob(parts)`. `now` is the modification time of every entry. */
 export function zipParts(files: readonly ZipFile[], now = new Date()): (DataView<ArrayBuffer> | Uint8Array<ArrayBuffer>)[] {
   const enc = new TextEncoder();
   const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
@@ -70,7 +74,7 @@ export function zipParts(files: readonly ZipFile[], now = new Date()): (DataView
   return [...parts, ...central, end];
 }
 
-// The two files of a downloaded key pair: private (600) and public (644, only when there is one).
+/** Returns the files of a downloaded key pair: private (600) and, when there is one, public (644). */
 export function sshKeyPairFiles({ name, algo, privateKey, publicKey }: { name: string; algo: string; privateKey: string; publicKey: string }): { base: string; files: ZipFile[] } {
   const base = sshFileName(name, algo);
   const nl = (t: string): string => (t.endsWith('\n') ? t : `${t}\n`);

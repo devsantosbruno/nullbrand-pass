@@ -1,5 +1,5 @@
-// The one place that talks to the local server. The session lives in an HttpOnly cookie set at /auth; JS never sees the token.
-// Every answer is `unknown` until its guard (api-guards.ts) has looked at it.
+// The only module that talks to the local server. The session lives in an HttpOnly cookie, so JS never sees the token.
+// Every answer is `unknown` until its guard has checked it.
 import { errText } from './i18n.js';
 import type { ApiResponses, ApiRoute } from './api.js';
 import { isApiErrorResponse } from './api-guards.js';
@@ -8,8 +8,7 @@ import { errorMessage } from './guards.js';
 import { NOT_JSON, readJson } from './json.js';
 import { t } from './locale.js';
 
-// A response that does not have the shape the UI expects. Nothing is rendered from it: the screen stays as it was.
-// `route` and `reason` (field names only, never values) go to the console; the message is the translated, visible one.
+/** A response with an unexpected shape. Nothing is rendered from it and the screen stays as it was. `route` and `reason` (field names, never values) go to the console; the message is the translated, visible one. */
 export class ApiResponseError extends Error {
   readonly route: string;
   readonly reason: string;
@@ -22,7 +21,7 @@ export class ApiResponseError extends Error {
   }
 }
 
-// An error answer of the server (any non-2xx status): the message is already translated.
+/** A non-2xx answer from the server; the message is already translated. */
 export class ApiError extends Error {
   readonly status: number;
   readonly key: string | undefined;
@@ -33,16 +32,22 @@ export class ApiError extends Error {
   }
 }
 
-// What to show when the server says the session is gone (401) or the vault is locked (423). Set once by the page, which owns the screens.
+// Screen to show when the session is gone (401) or the vault is locked (423); the page, which owns the screens, sets it once.
 type SessionScreen = 'nosession' | 'unlock';
 let onSessionScreen: (screen: SessionScreen) => void = () => {};
+/** Registers the function that shows the `nosession` or `unlock` screen. */
 export function setSessionScreenHandler(handler: (screen: SessionScreen) => void): void {
   onSessionScreen = handler;
 }
 
-// `route` is the "METHOD /path" key of ./api.ts; `path` is the real URL when the route has a `:id` in it. `guard` narrows the
-// body of a 2xx answer: if it does not pass, nothing is returned (ApiResponseError). A non-2xx answer keeps working as it always
-// did: its body is only used to read message / key / params when it is a valid error body; otherwise the generic message.
+/**
+ * Calls a local API route and returns its validated answer.
+ * @param route the "METHOD /path" key of `ApiResponses`.
+ * @param path the real URL, when the route has a `:id`.
+ * @param guard checks the body of a 2xx answer.
+ * @throws {ApiResponseError} when a 2xx body fails the guard.
+ * @throws {ApiError} on a non-2xx status; its body is read for message, key and params only when it is a valid error body, else a generic message is used.
+ */
 export async function api<K extends ApiRoute>(route: K, { guard, body, path }: { guard: Guard<ApiResponses[K]>; body?: object; path?: string }): Promise<ApiResponses[K]> {
   const [method = '', routePath = ''] = route.split(' ');
   const res = await fetch(path ?? routePath, {
@@ -67,5 +72,5 @@ export async function api<K extends ApiRoute>(route: K, { guard, body, path }: {
   return checked.value;
 }
 
-// The message of a caught value, for textContent.
+/** Returns the message of a caught value for `textContent`, or `null`. */
 export const msgOf = (ex: unknown): string | null => errorMessage(ex) ?? null;

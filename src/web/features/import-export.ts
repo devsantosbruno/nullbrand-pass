@@ -11,16 +11,18 @@ import { toast } from '../toast.js';
 import { downloadBlob } from '../ui/download.js';
 import { statusLine } from '../ui/status-line.js';
 
-// A list of warnings (translated by key + params, like an error) under a dialog's form.
+// Renders warnings, translated through key and params like an error, under a dialog's form.
 function renderWarnings(list: HTMLElement, warnings: readonly ApiWarning[]): void {
   list.replaceChildren(...warnings.map((w) => el('li', { textContent: t(w.key, w.params) })));
 }
 
+/** What import/export needs from the page. */
 export interface ImportExportDeps {
-  // Loads the items and folders again (after an import or a restore).
+  /** Reloads items and folders after an import or a restore. */
   refresh(): Promise<void>;
 }
 
+/** Wires the tools dialog and the import and export dialogs it opens. */
 export function initImportExport({ refresh }: ImportExportDeps): void {
   const dlgTools = $dialog('#dlg-tools');
   const toolsMsg = statusLine($('#tools-msg'));
@@ -28,8 +30,8 @@ export function initImportExport({ refresh }: ImportExportDeps): void {
   $('#btn-tools-close').addEventListener('click', () => dlgTools.close());
 
   // ---------- Import a file ----------
-  // The flow is: choose a file -> the server reads it WITHOUT importing (dry run) and says what it found -> the options can be changed
-  // (every change asks again) -> Import.
+  // Flow: choose a file, the server reads it without importing (dry run) and reports what it found, options can change (each change asks
+  // again), then Import.
   const dlgImport = $dialog('#dlg-import');
   const importFile = $input('#import-file');
   const importFolder = $input('#import-folder');
@@ -38,7 +40,7 @@ export function initImportExport({ refresh }: ImportExportDeps): void {
   const importMsg = statusLine($('#import-msg'));
 
   let importText: string | undefined;
-  // Answers arrive out of order when the options change quickly: only the latest one is shown.
+  // Answers can arrive out of order when options change quickly; only the latest is shown.
   let importRequest = 0;
 
   function importBody(extra: object = {}): object {
@@ -128,12 +130,12 @@ export function initImportExport({ refresh }: ImportExportDeps): void {
   const exportPassword = $input('#export-password');
   const exportMsg = statusLine($('#export-msg'));
 
-  // Encrypted is the native backup, readable only by nullbrand; unencrypted is a JSON file any app can be pointed at.
+  // Encrypted is the native backup, readable only by nullbrand; unencrypted is a JSON file any app can read.
   function renderExportChoices(): void {
     const plain = exportProtection.value === 'plain';
     $('#export-plain').hidden = !plain;
     renderWarnings($('#export-warnings'), []);
-    // What the plain file cannot hold, counted from the items already on screen.
+    // What the plain file cannot hold, counted from the items on screen.
     const ssh = state.items.filter((i) => i.type === 'ssh').length;
     $('#export-note').textContent = !plain ? t('export.dlg.encryptedNote') : ssh > 0 ? t('export.dlg.lossyJson', { count: ssh }) : '';
   }
@@ -152,7 +154,7 @@ export function initImportExport({ refresh }: ImportExportDeps): void {
   });
   exportProtection.addEventListener('change', renderExportChoices);
 
-  // The encrypted backup is a file, not JSON for the UI to read: it does not go through api(), and the answer is handed to the browser as it is.
+  // The encrypted backup is a file, not JSON for the UI, so it bypasses api() and the answer goes to the browser as is.
   async function exportBackup(): Promise<void> {
     const res = await fetch('/api/export/backup');
     if (!res.ok) {

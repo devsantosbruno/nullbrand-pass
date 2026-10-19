@@ -1,8 +1,9 @@
-// The toast (the short message at the bottom) and the helpers that turn a caught error into one.
+// The toast, the short message at the bottom, and helpers that turn a caught error into one.
 import { $ } from './dom.js';
 import { ApiResponseError, msgOf } from './http.js';
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
+/** Shows a message for `ms` milliseconds. */
 export function toast(msg: string | null, ms = 2200): void {
   const t = $('#toast');
   t.textContent = msg;
@@ -11,12 +12,13 @@ export function toast(msg: string | null, ms = 2200): void {
   toastTimer = setTimeout(() => (t.hidden = true), ms);
 }
 
-// An ApiResponseError reaches the user as a toast (longer than the usual one: it is rare and must not go unnoticed).
+// An invalid response is rare and must not go unnoticed, so its toast lasts longer.
 const INVALID_RESPONSE_TOAST_MS = 8000;
+/** Returns `ms`, raised to the longer duration for an {@link ApiResponseError}. */
 export const toastMs = (ex: unknown, ms: number): number => (ex instanceof ApiResponseError ? Math.max(ms, INVALID_RESPONSE_TOAST_MS) : ms);
+/** Shows the message of a caught error. */
 export const toastError = (ex: unknown): void => toast(msgOf(ex), toastMs(ex, 2200));
-// For calls that used to have no catch (an error ended up as an unhandled rejection): only the new error is shown; any other is
-// thrown again, so it ends up exactly where it did before.
+/** For calls with no handler of their own: toasts an {@link ApiResponseError} and rethrows anything else. */
 export function toastIfInvalidResponse(ex: unknown): void {
   if (ex instanceof ApiResponseError) toastError(ex);
   else throw ex;

@@ -1,5 +1,5 @@
-// The detail pane in edit mode: the form for the five item types, its masks and validation, saving and deleting. Everything about the SSH
-// key lives in ssh-editor.ts; the folder picker is the folders feature's.
+// The detail pane in edit mode: the form for the five item types, its masks and validation, saving and deleting.
+// The SSH key part lives in ssh-editor.ts and the folder picker in the folders feature.
 import { guardOkResponse, guardVaultItem } from '../api-guards.js';
 import { $, $button, $form, expectInstance, el, oneOf, query, queryAll, tx, at, data } from '../dom.js';
 import { confirmDelete } from '../dialogs.js';
@@ -20,8 +20,7 @@ import type { ValidatedField } from '../ui/validators.js';
 import { isItemType } from '../vault-types.js';
 import type { ItemType, VaultItem } from '../vault-types.js';
 
-// What the editor needs from the other features, written as the editor sees it: the page hands over objects that have these
-// methods (features/ never import each other).
+/** What the editor needs from the other features, as it sees them. Features never import each other, so the page passes in objects with these methods. */
 export interface EditorDeps {
   // The folder picker.
   folders: { value(): string; setValue(folder: string): void; closeMenu(): void };
@@ -44,23 +43,24 @@ export interface EditorDeps {
   renderList(): void;
   refresh(): Promise<void>;
 }
+/** What the editor exposes to the page. */
 export interface EditorHandle {
-  // A language change: the title, the eyes' labels and the SSH section titles are written again.
+  /** Rewrites the language-dependent text: title, reveal-button labels and SSH section titles. */
   repaint(): void;
 }
 
-// The placeholder follows the field state: mask with • when hidden, real example when visible.
+// Placeholder per state: bullets while the field is masked, a real example while it is shown.
 const SECRET_PLACEHOLDERS = {
   password: ['••••••••', 'my-password-123'],
   cardNumber: ['•••• •••• •••• ••••', '1234 5678 9012 3456'],
   cardCvv: ['•••', '0123'],
 } as const;
 
-// The text fields of the form that are an item property of the same name (the identity ones come from IDENTITY_KEYS, the SSH ones from
-// the SSH editor; the site and the notes are not plain: one is the first of a list, the other a textarea).
+// Text fields that map to an item property of the same name. Identity fields come from IDENTITY_KEYS and SSH ones from the SSH editor;
+// the site (first of a list) and the notes (a textarea) are handled separately.
 const PLAIN_FIELDS = ['name', 'username', 'password', 'cardholder', 'cardNumber', 'cardExpiry', 'cardCvv'] as const;
 
-// Fields validated for each item type (those of other types are hidden and don't count).
+// Fields validated per item type; fields of other types are hidden and do not count.
 const VALIDATED_BY_TYPE: Readonly<Record<ItemType, readonly ValidatedField[]>> = {
   login: ['uris'],
   card: ['cardNumber', 'cardExpiry', 'cardCvv'],
@@ -98,11 +98,12 @@ function paintEditTitle(item: VaultItem | null = state.editing): void {
   $('#edit-title').textContent = t(item ? 'edit.titleEdit' : 'edit.titleNew');
 }
 
+/** Wires the edit form and returns its handle. */
 export function initEditor({ folders, generator, ssh, select, renderView, renderList, refresh }: EditorDeps): EditorHandle {
   buildIdentityForm();
 
   const form = $form('#detail-edit');
-  // The controls of the form, by name (the identity ones were just built by buildIdentityForm).
+  // Controls by name; the identity ones were just built.
   const fieldInput = (name: string): HTMLInputElement => expectInstance(form.elements.namedItem(name), HTMLInputElement, `form field ${name}`);
   const fieldTextarea = (name: string): HTMLTextAreaElement => expectInstance(form.elements.namedItem(name), HTMLTextAreaElement, `form field ${name}`);
   const fieldRadios = (name: string): RadioNodeList => expectInstance(form.elements.namedItem(name), RadioNodeList, `form field ${name}`);
@@ -133,7 +134,7 @@ export function initEditor({ folders, generator, ssh, select, renderView, render
   fCardExpiry.addEventListener('input', () => { fCardExpiry.value = fmtCardExpiry(fCardExpiry.value); });
   fCardCvv.addEventListener('input', () => { fCardCvv.value = fCardCvv.value.replace(/\D/g, '').slice(0, 4); });
 
-  // One eye per secret field of the editor (the login password, the card number and CVV; the SSH private key's is the SSH editor's).
+  // One eye per secret field: login password, card number and CVV. The SSH private key's belongs to the SSH editor.
   const passwordToggle = createRevealToggle({ input: fPassword, button: $button('#edit-toggle'), label: (shown) => t(shown ? 'password.hide' : 'password.show'), eyeOff: 'eye-off-wide', iconOptions: { size: 16, strokeWidth: 2 }, placeholders: SECRET_PLACEHOLDERS.password });
   const revealToggles: readonly RevealToggle[] = [
     passwordToggle,
@@ -148,7 +149,7 @@ export function initEditor({ folders, generator, ssh, select, renderView, render
     }),
     ssh.revealToggle,
   ];
-  // A secret is never left showing from a previous item: opening the editor puts every one back to hidden (S3).
+  // A secret must not stay visible from a previous item, so opening the editor hides every one.
   const resetSecrets = (): void => { for (const toggle of revealToggles) toggle.setShown(false); };
 
   function openEditor(item: VaultItem | null): void {
@@ -185,7 +186,7 @@ export function initEditor({ folders, generator, ssh, select, renderView, render
   }));
 
   // ---------- Validation ----------
-  // Fields with a defined format are checked (ui/validators.ts). An empty field is always accepted (only Name is required).
+  // Fields with a defined format are checked. An empty field is always accepted; only Name is required.
   function setFieldError(input: HTMLInputElement, msg: string): void {
     const label = expectInstance(input.closest('label'), HTMLLabelElement, 'label of a validated field');
     let hint: Element | null = label.querySelector(':scope > .field-error');

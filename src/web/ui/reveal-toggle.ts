@@ -1,25 +1,28 @@
-// The eye button of a masked input (S3): shows or hides the value by switching the input's CSS mask, and repaints the button (icon,
-// accessible name) and, when asked, the input's placeholder (dots when hidden, an example when visible). It never keeps the value.
+// The eye button of a masked input: shows or hides the value by switching the input's CSS mask, and repaints the button (icon,
+// accessible name) and, when asked, the placeholder (dots when hidden, an example when visible). It never keeps the value.
 import { icon } from './icons.js';
 import type { IconName, IconOptions } from './icons.js';
 import { isMasked, setMasked } from './secret-input.js';
 
+/** Options for {@link createRevealToggle}. */
 export interface RevealToggleOptions {
   input: HTMLInputElement;
   button: HTMLButtonElement;
-  // The accessible name of the button for each state, already translated: read on every repaint, so a language change only needs repaint().
+  /** The button's accessible name per state, already translated. Read on every repaint, so a language change only needs `repaint()`. */
   label: (shown: boolean) => string;
-  // The icon of the "shown" state (the slashed eye); the login password keeps its wider slash.
+  /** Icon for the "shown" state (the slashed eye); the login password uses a wider slash. */
   eyeOff?: IconName;
   iconOptions?: IconOptions;
   placeholders?: readonly [hidden: string, visible: string];
 }
+/** Controls for a reveal button. */
 export interface RevealToggle {
   readonly input: HTMLInputElement;
   repaint(): void;
   setShown(shown: boolean): void;
 }
 
+/** Wires an eye button to a masked input. */
 export function createRevealToggle({ input, button, label, eyeOff = 'eye-off', iconOptions, placeholders }: RevealToggleOptions): RevealToggle {
   function repaint(): void {
     const shown = !isMasked(input);

@@ -1,4 +1,4 @@
-// The three gates of the vault: create it (first run), unlock it, lock it. Also the check made when the tab comes back to the front.
+// The three gates of the vault (create, unlock, lock) and the status check when the tab returns to the front.
 import { guardOkResponse, guardStatusResponse } from '../api-guards.js';
 import { $, $button, $input } from '../dom.js';
 import { api, msgOf } from '../http.js';
@@ -9,15 +9,17 @@ import { toast, toastIfInvalidResponse } from '../toast.js';
 import { withBusy } from '../ui/busy.js';
 import { paintMeter } from '../ui/meter.js';
 
+/** What the session feature needs from the page. */
 export interface SessionDeps {
-  // Shows the vault screen and loads its lists; throws if they do not come back valid.
+  /** Shows the vault screen and loads its lists. Throws if they come back invalid. */
   enterVault(): Promise<void>;
 }
 
+/** Wires the setup, unlock and lock screens. */
 export function initSession({ enterVault }: SessionDeps): void {
   const setupPass = $input('#setup-pass');
   setupPass.addEventListener('input', () => paintMeter($('#setup-meter'), setupPass.value));
-  // No <form> on these screens: without a form submission the browser has nothing to offer to save.
+  // These screens have no <form>, so the browser never offers to save the password.
   const onEnterOrClick = (root: HTMLElement, btn: HTMLButtonElement, run: () => Promise<void>): void => {
     btn.addEventListener('click', () => { void run(); });
     root.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement && !btn.disabled) { e.preventDefault(); void run(); } });
@@ -69,7 +71,7 @@ export function initSession({ enterVault }: SessionDeps): void {
     state.selectedId = null;
     state.current = null;
     showDetail(null);
-    // The session survives a lock: go back to the unlock screen.
+    // The session survives a lock, so go back to the unlock screen.
     try {
       const st = await api('GET /api/status', { guard: guardStatusResponse });
       state.status = st;
@@ -78,7 +80,7 @@ export function initSession({ enterVault }: SessionDeps): void {
     showScreen('unlock');
   });
 
-  // Auto-lock: the server locks; here we only check when returning to the tab.
+  // The server does the auto-lock; the page only checks when the tab returns.
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState !== 'visible' || $('#screen-vault').hidden) return;
     try {

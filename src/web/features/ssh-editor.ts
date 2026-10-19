@@ -1,4 +1,4 @@
-// The SSH key part of the editor: generating or importing a key runs on the server, the key fields are read-only, and the
+// The SSH key part of the editor: keys are generated or inspected on the server, the key fields are read-only, and the
 // ~/.ssh/config entry is previewed as the connection fields are typed.
 import { guardSshKeyResponse } from '../api-guards.js';
 import { $, $button, $form, $input, $textarea, data, dataOneOf, expectInstance, firstFile, queryAll, textOf } from '../dom.js';
@@ -14,6 +14,7 @@ import { createRevealToggle } from '../ui/reveal-toggle.js';
 import type { RevealToggle } from '../ui/reveal-toggle.js';
 import type { VaultItem } from '../vault-types.js';
 
+/** The SSH fields of an item as the form holds them. */
 export type SshValues = {
   sshAlgo: string;
   sshTitle: string;
@@ -24,21 +25,22 @@ export type SshValues = {
   sshUser: string;
   sshPort: string;
 };
+/** What the SSH editor exposes to the main editor. */
 export interface SshEditorHandle {
-  // The eye of the private key field.
+  /** The reveal toggle of the private key field. */
   readonly revealToggle: RevealToggle;
-  // Called when the type switches to SSH: a new item gets a key right away.
+  /** Called when the type switches to SSH; a new item gets a key right away. */
   ensureKey(): void;
-  // The start of opening the editor: forgets the previous item's key and the answer to "replace it?".
+  /** Called when the editor opens: forgets the previous item's key and the answer to "replace it?". */
   reset(): void;
-  // The key and connection fields of the item (or empty ones), and the preview built from them.
+  /** Fills the key and connection fields from the item (or empties them) and rebuilds the preview. */
   fill(item: VaultItem | null): void;
   hasKey(): boolean;
   hasPrivateKey(): boolean;
-  // Saving a key pair without its private key (only the .pub was imported) needs a yes.
+  /** Asks for confirmation to save a key pair whose private key is missing (only a .pub was imported). */
   confirmPubOnly(): Promise<boolean>;
   values(): SshValues;
-  // A language change: the section titles are written again.
+  /** Rewrites the language-dependent section titles. */
   repaint(): void;
 }
 
@@ -50,6 +52,7 @@ interface SshKeyInput {
   comment?: string | undefined;
 }
 
+/** Wires the SSH key section of the edit form and returns its handle. */
 export function initSshEditor(): SshEditorHandle {
   const form = $form('#detail-edit');
   const fieldInput = (name: string): HTMLInputElement => expectInstance(form.elements.namedItem(name), HTMLInputElement, `form field ${name}`);
@@ -71,7 +74,7 @@ export function initSshEditor(): SshEditorHandle {
   const confirmPubOnly = (): Promise<boolean> =>
     confirm({ title: t('sshpub.title'), body: rich(t('sshpub.body')), okLabel: t('sshpub.save'), cancelLabel: t('common.cancel') });
 
-  // Generating or importing another key on an item that already has one: on save, the previous one is lost.
+  // Generating or importing a key over an existing one loses the previous key on save, so ask once.
   let overwriteOk = false;
   async function confirmOverwrite(action: 'generate' | 'import'): Promise<boolean> {
     if (overwriteOk || !state.editing?.sshPublicKey) return true;
@@ -142,7 +145,7 @@ export function initSshEditor(): SshEditorHandle {
     if (target.name === 'sshAlgo' && fSshSource.value === 'new') void generate();
   });
   $('#ssh-regen').addEventListener('click', async () => { if (await confirmOverwrite('generate')) void generate(); });
-  // Imports on its own: when a complete key is pasted, or when leaving the field with something typed.
+  // Imports by itself when a complete key is pasted, or when the field loses focus with text in it.
   sshPaste.addEventListener('input', () => { if (/-----END [A-Z ]*PRIVATE KEY-----/.test(sshPaste.value)) void importKey(); });
   sshPaste.addEventListener('blur', () => { if (sshPaste.value.trim()) void importKey(); });
   $('#ssh-pick').addEventListener('click', async () => { if (await confirmOverwrite('import')) $('#ssh-file').click(); });

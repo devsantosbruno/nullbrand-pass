@@ -10,23 +10,26 @@ import { openDialog } from '../ui/dialog.js';
 import { icon } from '../ui/icons.js';
 import { createMenu, flipUp } from '../ui/menu.js';
 
+/** What the folders feature needs from the page. */
 export interface FoldersDeps {
   renderList(): void;
-  // Loads the items and folders again and repaints the sidebar and the list.
+  /** Reloads items and folders, then repaints the sidebar and the list. */
   refresh(): Promise<void>;
 }
+/** What the folders feature exposes to the page. */
 export interface FoldersHandle {
   renderSidebar(): void;
-  // The folder picker of the editor.
+  /** The editor's folder picker: current value. */
   value(): string;
   setValue(folder: string): void;
   closeMenu(): void;
-  // Opens the new-folder dialog; resolves with the name (existing or new) or null if cancelled.
+  /** Opens the new-folder dialog; resolves with the folder name (existing or new), or `null` if cancelled. */
   promptNew(): Promise<string | null>;
-  // A language change: the picker's label ("No folder") is written again.
+  /** Rewrites the picker's language-dependent label ("No folder"). */
   repaint(): void;
 }
 
+/** Wires the sidebar, the editor's folder picker and the folder dialogs, and returns its handle. */
 export function initFolders({ renderList, refresh }: FoldersDeps): FoldersHandle {
   // ---------- Folder select (in the editor) ----------
   const folderSelect = $('#folder-select');
@@ -91,6 +94,7 @@ export function initFolders({ renderList, refresh }: FoldersDeps): FoldersHandle
   // ---------- New folder ----------
   const dlgFolder = $dialog('#dlg-folder');
   const folderName = $input('#folder-name');
+  /** Returns the existing folder whose name matches case-insensitively, if any. */
   const folderExists = (name: string): string | undefined => state.folders.find((f) => f.toLowerCase() === name.toLowerCase());
 
   function promptNewFolder(): Promise<string | null> {
@@ -124,7 +128,7 @@ export function initFolders({ renderList, refresh }: FoldersDeps): FoldersHandle
   const folderDeletePanel = $('#folder-delete-panel');
   let editingFolder: string | null = null;
   let confirmingDelete = false;
-  // The folder being edited, for the places that need its name. The dialog only opens through editFolder().
+  // The dialog only opens through editFolder(), so a folder is always set when this is called.
   function editedFolder(): string {
     if (editingFolder === null) throw new DomValueError('no folder is being edited');
     return editingFolder;

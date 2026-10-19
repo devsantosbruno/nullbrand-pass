@@ -1,8 +1,9 @@
-// The identity item type as data: its sections and fields drive both the viewer (what to list) and the editor (what to build).
+// The identity item type as data: its sections and fields drive both the viewer and the editor.
 import type { IdentityKey } from './vault-types.js';
 import type { IconName } from './ui/icons.js';
 import { digits, maskDate, maskDigits, maskPhone } from './ui/masks.js';
 
+/** One identity field. `label` and `placeholderKey` are i18n keys; `half` lays two fields side by side. */
 export interface IdentityField {
   key: IdentityKey;
   label: string;
@@ -15,11 +16,13 @@ export interface IdentityField {
   mask?: (v: string) => string;
   half?: boolean;
 }
+/** A titled group of identity fields. */
 export interface IdentitySection {
   title: string;
   icon: IconName;
   fields: IdentityField[];
 }
+/** The identity item's sections, in display order. */
 export const IDENTITY_SECTIONS: IdentitySection[] = [
   { title: 'identity.personal', icon: 'user', fields: [
     { key: 'fullName', label: 'field.fullName', max: 128, placeholder: 'Jane Doe' },
@@ -43,4 +46,5 @@ export const IDENTITY_SECTIONS: IdentitySection[] = [
     { key: 'country', label: 'field.country', max: 64, placeholder: 'Brazil', half: true },
   ] },
 ];
+/** Every identity key, in display order. */
 export const IDENTITY_KEYS: IdentityKey[] = IDENTITY_SECTIONS.flatMap((s) => s.fields.map((f) => f.key));

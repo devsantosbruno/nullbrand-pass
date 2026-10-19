@@ -1,28 +1,29 @@
-// A popup menu: a trigger button and a hidden panel of items. Click on the trigger toggles it; ArrowUp/ArrowDown move through the items
-// (wrapping), Esc closes it and gives the focus back to the trigger, a click anywhere else closes it. What differs between the menus of
-// the page (how it is placed, what each item does, what its items are) is passed in, not decided here.
+// A popup menu: a trigger button and a hidden panel of items. The trigger toggles it, ArrowUp/ArrowDown move through the items with wrapping,
+// Esc closes it and returns focus to the trigger, and a click elsewhere closes it. What differs per menu (placement, items, actions) is passed in.
 import { at, containsTarget, expectInstance, queryAll } from '../dom.js';
 import { step } from './step.js';
 
+/** Options for {@link createMenu}. */
 export interface MenuOptions {
   trigger: HTMLElement;
   menu: HTMLElement;
-  // Selects the items of the panel that the arrow keys move through.
+  /** Selects the items the arrow keys move through. */
   itemSelector: string;
-  // Called before the panel is shown, to build its items.
+  /** Called before the panel is shown, to build its items. */
   onOpen?: () => void;
   onClose?: () => void;
-  // Called right after the panel is shown, to place it relative to the trigger (a menu placed by CSS leaves it out).
+  /** Called right after the panel is shown, to position it relative to the trigger. Leave out when CSS positions it. */
   place?: (menu: HTMLElement, trigger: HTMLElement) => void;
-  // What a window resize does while the panel is open.
+  /** What a window resize does while the panel is open. */
   onResize?: 'close' | 'place';
-  // The item that gets the focus on open (default: the first one).
+  /** The item that gets focus on open (default: the first). */
   initialFocus?: () => Element | null;
-  // The element that receives the keys (default: the panel; a menu whose trigger sits in a wrapper can listen on the wrapper).
+  /** The element that receives key events (default: the panel); a menu whose trigger sits in a wrapper can listen on the wrapper. */
   keyScope?: HTMLElement;
-  // Whether Esc stops there. A menu inside the bulk-selection area must not also clear the selection.
+  /** Whether Esc stops propagating. A menu inside the bulk-selection area must not also clear the selection. */
   stopEscape?: boolean;
 }
+/** Controls for an open/close menu. */
 export interface MenuHandle {
   readonly isOpen: boolean;
   open(): void;
@@ -31,8 +32,7 @@ export interface MenuHandle {
   destroy(): void;
 }
 
-// Opens above the trigger when there is no room below and more above. The page uses CSS zoom, so the visual height is scaled back
-// to the local one.
+/** A `place` function that opens the menu above the trigger when there is no room below and more above. The page uses CSS zoom, so visual heights are scaled back to local ones. */
 export function flipUp(menu: HTMLElement, trigger: HTMLElement): void {
   const r = trigger.getBoundingClientRect();
   const below = window.innerHeight - r.bottom;
@@ -40,9 +40,10 @@ export function flipUp(menu: HTMLElement, trigger: HTMLElement): void {
   menu.classList.toggle('up', below < need && r.top > below);
 }
 
+/** Wires a trigger and a panel into a menu and returns its controls. Call `destroy()` to remove the listeners. */
 export function createMenu({ trigger, menu, itemSelector, onOpen, onClose, place, onResize, initialFocus, keyScope = menu, stopEscape = true }: MenuOptions): MenuHandle {
   const items = (): HTMLElement[] => queryAll(menu, itemSelector, HTMLElement);
-  // Only while it is open: a menu that is closed costs no work on every click or resize of the page.
+  // Registered only while open, so a closed menu costs nothing on every click or resize.
   const onDocumentClick = (e: MouseEvent): void => {
     if (!containsTarget(menu, e.target) && !containsTarget(trigger, e.target)) close();
   };
@@ -84,7 +85,8 @@ export function createMenu({ trigger, menu, itemSelector, onOpen, onClose, place
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     const list = items();
     const current = list.findIndex((item) => item === document.activeElement);
-    if (current < 0) return; // the focus is not on an item (e.g. on the trigger): nothing to move from
+    // Focus is not on an item (for example on the trigger): nothing to move from.
+    if (current < 0) return;
     e.preventDefault();
     at(list, step(list.length, current, e.key === 'ArrowDown' ? 1 : -1)).focus();
   };

@@ -1,4 +1,4 @@
-// The detail pane in view mode: one item, field by field. Secrets are shown as dots and only enter the DOM while revealed (S3).
+// The detail pane in view mode: one item, field by field. Secrets show as dots and only enter the DOM while revealed.
 import { guardVaultItem } from '../api-guards.js';
 import { $, el } from '../dom.js';
 import { ApiResponseError, api } from '../http.js';
@@ -15,12 +15,14 @@ import type { IconName } from '../ui/icons.js';
 import { strengthLevel } from '../ui/strength.js';
 import { isHttpUrl, normalizeUrl, siteDomain } from '../ui/url.js';
 
+/** What the viewer needs from the page. */
 export interface ViewerDeps {
   renderList(): void;
   refresh(): Promise<void>;
 }
+/** What the viewer exposes to the page. */
 export interface ViewerHandle {
-  // Opens an item: selects it in the list and shows it.
+  /** Selects an item in the list and shows it. */
   select(id: string): Promise<void>;
   renderView(): void;
 }
@@ -32,14 +34,14 @@ const iconBtn = (name: IconName, label: string, className = 'dv-icon-btn'): HTML
   return b;
 };
 
-// Reusable field row for the detail pane.
-// kind: 'text' | 'password' | 'site'. The real password only enters the DOM when shown.
+// `password` rows hide the value until revealed; `site` rows link only http(s) URLs.
 interface FieldRowOptions {
   kind?: 'text' | 'password' | 'site';
   meter?: boolean;
   pre?: boolean;
   copyable?: boolean;
 }
+/** Builds one labeled row of the detail pane. */
 function FieldRow(label: string, value: string, { kind = 'text', meter = true, pre = false, copyable = false }: FieldRowOptions = {}): HTMLElement {
   const valueEl = el('div', { className: pre ? 'frow-value pre' : 'frow-value' });
   const body = el('div', { className: 'frow-body' }, el('div', { className: 'frow-label', textContent: label }), valueEl);
@@ -66,7 +68,7 @@ function FieldRow(label: string, value: string, { kind = 'text', meter = true, p
     if (meter) body.append(strengthEl);
     actions.append(toggle);
   } else if (kind === 'site') {
-    // The only place that makes a link out of what the user typed (S7): http(s) only, and it never leaves with an opener.
+    // The only place that turns user text into a link: http(s) only, and never with an opener.
     if (isHttpUrl(value)) {
       const href = normalizeUrl(value);
       valueEl.append(el('a', { href, textContent: siteDomain(value), target: '_blank', rel: 'noopener noreferrer' }));
@@ -85,7 +87,7 @@ function FieldRow(label: string, value: string, { kind = 'text', meter = true, p
   return row;
 }
 
-// Downloads the key pair in a single .zip: private (600) and public (644).
+// Downloads the key pair as one .zip: private (600) and public (644).
 function downloadSshKeyPair(key: { name: string; algo: string; privateKey: string; publicKey: string }): void {
   const { base, files } = sshKeyPairFiles(key);
   downloadBlob(new Blob(zipParts(files), { type: 'application/zip' }), `${base}.zip`);
@@ -183,8 +185,9 @@ function renderView(): void {
   showDetail('view');
 }
 
+/** Wires the favorite and back buttons and returns the viewer handle. */
 export function initViewer({ renderList, refresh }: ViewerDeps): ViewerHandle {
-  // If the item does not come back valid, nothing is shown from it: the previous selection and detail stay as they were.
+  // If the item comes back invalid nothing is shown from it, and the previous selection and detail stay.
   async function select(id: string): Promise<void> {
     const previousId = state.selectedId;
     state.selectedId = id;

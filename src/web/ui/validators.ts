@@ -1,35 +1,42 @@
-// Validation of the editor's fields that have a defined format. An empty field is always accepted (the caller only runs these on a value);
-// only Name is required. Each returns '' when valid, or the translated message. Pure: no DOM; the translator comes in as `say`.
-// A message never contains the value that was typed (S3): only the field's label and fixed limits.
+// Validation of the editor's fields that have a defined format. The caller only runs these on a non-empty value; only Name is required.
+// Each returns '' when valid or the translated message. Pure: no DOM, the translator comes in as `say`.
+// A message never contains the typed value, only the field's label and fixed limits.
 import { onlyDigits } from './masks.js';
 
+/** Translates a message key. */
 export type Say = (key: string, params?: Readonly<Record<string, string | number>>) => string;
+/** Returns `''` when the value is valid, else the translated message. */
 export type Validator = (v: string, say: Say) => string;
 
 const exactDigits = (n: number, labelKey: string): Validator => (v, say) => (onlyDigits(v).length === n ? '' : say('val.digits', { label: say(labelKey), n }));
 
+/** Checks a digit string with the Luhn algorithm. */
 export const luhn = (num: string): boolean => {
   let sum = 0;
   [...num].reverse().forEach((ch, k) => { let d = Number(ch); if (k % 2) { d *= 2; if (d > 9) d -= 9; } sum += d; });
   return sum % 10 === 0;
 };
-// Check digits for CPF/CNPJ (Brazilian taxpayer IDs); repeated sequences (111.111.111-11) are invalid.
+// Check digit for CPF/CNPJ (Brazilian taxpayer IDs).
 const checkDigit = (nums: readonly number[], weights: readonly number[]): number => {
   const r = nums.reduce((acc, n, k) => acc + n * (weights[k] ?? 0), 0) % 11;
   return r < 2 ? 0 : 11 - r;
 };
+/** Validates a CPF from its 11 digits. Repeated sequences such as 111.111.111-11 are invalid. */
 export const validCpf = (d: string): boolean => {
   if (/^(\d)\1+$/.test(d)) return false;
   const n = [...d].map(Number);
   return checkDigit(n.slice(0, 9), [10, 9, 8, 7, 6, 5, 4, 3, 2]) === n[9] && checkDigit(n.slice(0, 10), [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]) === n[10];
 };
+/** Validates a CNPJ from its 14 digits. Repeated sequences are invalid. */
 export const validCnpj = (d: string): boolean => {
   if (/^(\d)\1+$/.test(d)) return false;
   const n = [...d].map(Number);
   return checkDigit(n.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === n[12] && checkDigit(n.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === n[13];
 };
 
+/** Fields that have a validator. */
 export type ValidatedField = 'uris' | 'cardNumber' | 'cardExpiry' | 'cardCvv' | 'email' | 'birthDate' | 'phone' | 'cpf' | 'cnpj' | 'pis' | 'cnh' | 'zip' | 'sshHost' | 'sshPort';
+/** The validator of each {@link ValidatedField}. */
 export const FIELD_VALIDATORS: Readonly<Record<ValidatedField, Validator>> = {
   uris: (v, say) => {
     const site = v.trim();

@@ -1,6 +1,6 @@
-// nullbrand front-end. Vanilla TypeScript, no dependencies. This file only composes: it boots the page, switches the language, and
-// wires the features of features/ together (each gets what it needs from the others as parameters, never by importing them).
-// User data is always inserted with textContent (never innerHTML).
+// nullbrand front-end: vanilla TypeScript, no dependencies. This file only composes: it boots the page, switches the language and wires
+// the features together, each receiving what it needs from the others as parameters rather than imports.
+// User data always goes in through textContent, never innerHTML.
 import { resolveLang, normalizeLang } from './i18n.js';
 import type { Lang } from './i18n.js';
 import type { StatusResponse } from './api.js';
@@ -24,13 +24,13 @@ import { initViewer } from './features/viewer.js';
 import { applyIcons } from './ui/icons.js';
 import { applySecretInputs } from './ui/secret-input.js';
 
-// Before anything can be shown or focused: every masked input gets its autofill/IME attributes (S6), and the static icons are drawn.
+// Runs before anything is shown or focused: masked inputs get their autofill/IME attributes and the static icons are drawn.
 applySecretInputs(document);
 applyIcons(document);
 setSessionScreenHandler(showScreen);
 
 // ---------- Language ----------
-// Switches without reloading: static text via data-i18n attributes, dynamic parts re-rendered.
+/** Switches the language without reloading: static text through `data-i18n`, dynamic parts re-rendered. `persist` also saves the choice on the server. */
 function setLang(next: Lang, { persist = false }: { persist?: boolean } = {}): void {
   if (!normalizeLang(next)) return;
   setLocale(next);
@@ -57,16 +57,16 @@ document.addEventListener('click', (e) => {
 });
 
 // ---------- Boot ----------
-// The status decides which screen comes first. If its answer is not valid there is no screen to keep, and none is guessed: the
-// "no session" screen shows the error with a button to try again (only on click, never by itself).
+// If the status answer is invalid no screen is guessed: the "no session" screen shows the error with a retry button (click only, never automatic).
 function showBootError(): void {
   showScreen('nosession');
   $('#nosession-info').hidden = true;
   $('#nosession-fail').hidden = false;
 }
+// The status decides which screen comes first.
 async function boot(): Promise<void> {
   await loadDicts();
-  // Until the server answers, follow the browser. The server's answer wins when the choice is explicit.
+  // Follow the browser until the server answers; the server wins when the choice is explicit.
   setLang(resolveLang({ system: navigator.language }).lang, { persist: false });
   let status: StatusResponse;
   try {
@@ -98,17 +98,15 @@ $button('#nosession-retry').addEventListener('click', async (e) => {
   }
 });
 
-// If the lists do not come back valid, nothing is rendered from them: the screen that was showing comes back (with the error visible
-// there, by the caller) instead of an empty vault that would look like the real one. Before the first screen there is none to go
-// back to, so the error screen of the boot takes its place.
+// If the lists come back invalid nothing is rendered from them: the previous screen returns, with the error shown by the caller, instead of an
+// empty vault that would look real. With no previous screen the boot error screen takes its place.
 async function enterVault(): Promise<void> {
   const before = screenShowing();
   showScreen('vault');
   try {
     await refresh();
   } catch (ex) {
-    // Any failure of the first load leaves the vault screen: the caller's error element is on the previous screen.
-    // A 401/423 has already sent api() to nosession/unlock, which stays.
+    // The caller's error element is on the previous screen. A 401/423 has already sent api() to nosession/unlock, which stays.
     if (screenShowing() === 'vault') {
       if (before === null) showBootError();
       else showScreen(before);
@@ -127,8 +125,7 @@ async function refresh(): Promise<void> {
 }
 
 // ---------- Features ----------
-// Each one wires its own listeners. What a feature needs from another comes in here: as a handle, or as a thunk when the other is
-// created later (a thunk is only called once the page is running).
+// Each feature wires its own listeners. What it needs from another arrives as a handle, or as a thunk when the other is created later.
 initLayout();
 initSession({ enterVault });
 const folders = initFolders({ renderList: () => list.renderList(), refresh });

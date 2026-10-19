@@ -14,13 +14,15 @@ import { createMenu } from '../ui/menu.js';
 import { hostOf } from '../ui/url.js';
 import type { ItemType } from '../vault-types.js';
 
+/** What the list needs from the other features. */
 export interface ListDeps {
-  // Opens an item in the detail pane.
+  /** Opens an item in the detail pane. */
   select(id: string): Promise<void>;
-  // Asks for a new folder name (the folders feature owns the dialog).
+  /** Asks for a new folder name; the folders feature owns the dialog. */
   promptNewFolder(): Promise<string | null>;
   refresh(): Promise<void>;
 }
+/** What the list exposes to the page. */
 export interface ListHandle {
   renderList(): void;
 }
@@ -38,6 +40,7 @@ function visibleItems(): PublicItem[] {
   });
 }
 
+/** Wires the item list, search and bulk selection, and returns its handle. */
 export function initList({ select, promptNewFolder, refresh }: ListDeps): ListHandle {
   function renderList(): void {
     const items = visibleItems();
@@ -113,7 +116,7 @@ export function initList({ select, promptNewFolder, refresh }: ListDeps): ListHa
     } catch (ex) { toastError(ex); }
   }
 
-  // The items are built each time it opens: they follow the folders as they are then.
+  // Rebuilt on every open so it reflects the current folders.
   function renderSelMenu(): void {
     const opt = (label: string, onClick: () => void | Promise<void>, extra: { sep?: boolean; count?: number } = {}): HTMLButtonElement => {
       const b = el('button', { type: 'button', className: `select-item${extra.sep ? ' sep' : ''}` }, el('span', { textContent: label }), extra.count != null ? el('span', { className: 'n', textContent: extra.count }) : null);

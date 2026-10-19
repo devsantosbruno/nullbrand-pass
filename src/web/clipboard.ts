@@ -1,5 +1,5 @@
-// Copying and clearing are done by the server (Node process), not by navigator.clipboard:
-// the browser may be unfocused when the timer fires. Here we only show the countdown.
+// The server copies and clears, not navigator.clipboard, because the browser may be unfocused when the timer fires.
+// This module only shows the countdown.
 import { guardClipboardCopyResponse } from './api-guards.js';
 import { $ } from './dom.js';
 import { api, msgOf } from './http.js';
@@ -12,6 +12,7 @@ function clipChip(text: string | null): void {
   chip.hidden = text == null;
   if (text != null) chip.textContent = text;
 }
+/** Shows a countdown chip for `seconds`, then a "cleared" notice. `0` hides the chip. */
 export function clipCountdown(seconds: number): void {
   clearInterval(clipTick);
   if (!seconds) return clipChip(null);
@@ -30,9 +31,11 @@ export function clipCountdown(seconds: number): void {
   clipTick = setInterval(paint, 1000);
 }
 
-// Every copy goes through here (S4). `sensitive` (passwords, TOTP, card numbers, CVV, private keys, notes) makes the server clear the
-// clipboard later; it has no default, so a new copy button cannot forget to say what it copies.
-// `what`: translated name of the copied field (for the toast); sensitive copies show the countdown instead.
+/**
+ * Copies text through the server. Every copy goes through here.
+ * @param what translated name of the field for the toast; sensitive copies show the countdown instead.
+ * @param sensitive passwords, TOTP, card numbers, CVV, private keys and notes: makes the server clear the clipboard later. Required, so a new copy button must say what it copies.
+ */
 export async function copy(text: string, what: string, { sensitive }: { sensitive: boolean }): Promise<void> {
   clearTimeout(clipTick);
   try {

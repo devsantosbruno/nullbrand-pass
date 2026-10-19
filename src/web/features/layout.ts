@@ -1,8 +1,8 @@
 // The page's layout controls: the collapsible sidebar and the draggable divider between the list and the detail pane.
-// The only things kept in localStorage are the two layout choices (`sidebar-collapsed`, `listWidth`); nothing sensitive, ever (S8).
+// localStorage holds only the two layout choices (`sidebar-collapsed`, `listWidth`); never anything sensitive.
 import { $, $button, expectInstance } from '../dom.js';
 
-// Ctrl/Cmd+B and the button next to the search box.
+// Toggled by Ctrl/Cmd+B and the button next to the search box.
 function initSidebarToggle(): void {
   const app = $('#screen-vault');
   const btn = $button('#btn-sidebar');
@@ -25,14 +25,13 @@ function initSidebarToggle(): void {
   });
 }
 
-// Resize list | detail
+// Drag, arrow keys or double-click (reset) on the divider between the list and the detail pane.
 function initListResize(): void {
   const MAX = 640, KEY = 'listWidth';
   const app = $('#screen-vault');
   const handle = $('#resize-handle');
   const handleParent = (): HTMLElement => expectInstance(handle.parentElement, HTMLElement, '#resize-handle parent');
-  // Minimum = natural width of the floating selection box (+ 12px margin on each side),
-  // measured on the spot: it depends on font, zoom and device language.
+  // The minimum is the natural width of the floating selection box plus 12px margin each side, measured on the spot since it depends on font, zoom and language.
   const bar = $('#sel-bar');
   const minW = (): number => {
     const wasHidden = bar.hidden, prevMax = bar.style.maxWidth;
@@ -43,7 +42,7 @@ function initListResize(): void {
     bar.hidden = wasHidden;
     return Math.ceil(w) + 24 || 260;
   };
-  // The app uses CSS zoom: clientX/rect are in visual px, the variable in local px.
+  // The app uses CSS zoom: clientX and rects are in visual px, the CSS variable in local px.
   const zoom = (): number => handleParent().getBoundingClientRect().width / handleParent().offsetWidth || 1;
   const clamp = (w: number): number => Math.max(minW(), Math.min(MAX, Math.min(w, (window.innerWidth / zoom()) * 0.6)));
   const apply = (w: number): void => app.style.setProperty('--list-w', clamp(w) + 'px');
@@ -59,7 +58,8 @@ function initListResize(): void {
     try { handle.setPointerCapture(e.pointerId); } catch {}
     app.classList.add('resizing');
     const move = (ev: PointerEvent): void => {
-      if (ev.buttons === 0) return finish(); // released outside and the pointerup was lost
+      // Released outside the window and the pointerup was lost.
+      if (ev.buttons === 0) return finish();
       apply(startW + (ev.clientX - startX) / z);
     };
     const finish = (): void => {
@@ -89,6 +89,7 @@ function initListResize(): void {
   });
 }
 
+/** Wires the sidebar toggle and the list resize handle. */
 export function initLayout(): void {
   initSidebarToggle();
   initListResize();
