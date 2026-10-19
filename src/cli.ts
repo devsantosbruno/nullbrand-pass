@@ -1,4 +1,3 @@
-// nullbrand command-line interface.
 import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -28,7 +27,7 @@ const c = {
 };
 const logo = () => `${c.dim('$')} ${c.bold('nullbrand')} ${c.dim('v' + version)}`;
 
-// Language of this process; set in main() after --lang / NULLBRAND_LANG / config.json are resolved.
+// Language of this process; set by main() once the language sources are resolved.
 let t: Translator = translator('en');
 
 const COL = 38;
@@ -81,18 +80,17 @@ ${t('help.langAt', { path: c.dim(join(defaultHome(), 'config.json')) })}
 `;
 }
 
-// The command-line flags. Every flag is a string, or a boolean (--x = true, --no-x = false); the ones that take a value may also be
-// undefined (parseArgs leaves a value flag unset and reports it in `missing`).
+// Parsed flags: a string, or a boolean (--x = true, --no-x = false). A value flag left without a value stays undefined.
 interface Flags {
   [flag: string]: string | boolean | undefined;
-  // These take a value (--port 3000, --port=3000): a string, `false` for --no-port, or undefined when the value is missing.
+  // Take a value (--port 3000, --port=3000); `false` for --no-port.
   port?: string | false | undefined;
   idle?: string | false | undefined;
   vault?: string | false | undefined;
   length?: string | false | undefined;
   clear?: string | false | undefined;
   lang?: string | false | undefined;
-  // These are switches: true, false (--no-x) or a string (--x=value).
+  // Switches: true, false (--no-x) or a string (--x=value).
   help?: string | boolean | undefined;
   version?: string | boolean | undefined;
   show?: string | boolean | undefined;
@@ -104,11 +102,10 @@ interface Flags {
   symbols?: string | boolean | undefined;
 }
 
-// Flags that take a value (--port 3000 / --port=3000) and switches (--open / --no-open); anything else is reported as unknown.
 const VALUE_FLAGS: readonly string[] = ['port', 'idle', 'vault', 'length', 'clear', 'lang', 'folder'];
 const SWITCH_FLAGS: readonly string[] = ['help', 'version', 'show', 'yes', 'open', 'upper', 'lower', 'digits', 'symbols', 'avoid-ambiguous', 'print-url', 'ignore-folders', 'unencrypted', 'i-understand'];
 
-// `missing`: value flags left without a value (last argument, or followed by another `--flag`). `unknown`: arguments that are not a known flag.
+// `missing` lists value flags with no value (last argument, or followed by another `--flag`); `unknown` lists unrecognized flags.
 function parseArgs(argv: readonly string[]): { positional: string[]; flags: Flags; missing: string[]; unknown: string[] } {
   const positional: string[] = [];
   const flags: Flags = {};
@@ -151,10 +148,10 @@ function parseArgs(argv: readonly string[]): { positional: string[]; flags: Flag
 
 class CliError extends Error {}
 
-// y/N prompt in the active language (the English answers are always accepted).
+// y/N prompt in the active language; the English answers are always accepted.
 const confirmT = (question: string): Promise<boolean> => confirm(question, { suffix: t('cli.yesNo'), yes: t('cli.yesWords').split(',') });
 
-// --clear <seconds>; --no-clear = 0 (do not clear).
+// Reads --clear <seconds> into milliseconds; --no-clear means 0 (never clear).
 function clearMs(flags: Flags): number {
   if (flags.clear === undefined) return DEFAULT_TTL_MS;
   if (flags.clear === false) return 0;
@@ -163,7 +160,7 @@ function clearMs(flags: Flags): number {
   return Math.round(n * 1000);
 }
 
-// Warns (on stderr, with no secret material) when an old vault was upgraded.
+/** Reports on stderr, without secret material, that an old vault was upgraded or that the upgrade failed. */
 export function reportMigration(vault: Vault, log: (message: string) => void = console.error): void {
   if (vault.migration) {
     const { from, backup } = vault.migration;
@@ -174,6 +171,7 @@ export function reportMigration(vault: Vault, log: (message: string) => void = c
   }
 }
 
+// Prompts for the master password, with three attempts.
 async function unlockInteractive(vaultPath: string): Promise<Vault> {
   if (!vaultExists(vaultPath)) {
     throw new CliError(t('cli.noVault', { path: vaultPath }));
@@ -222,7 +220,6 @@ function importSummary(added: number, skipped: number, ignored: number): string 
   return [t('import.added', { count: added }), skipped && t('import.skipped', { count: skipped }), ignored && t('import.ignored', { count: ignored })].filter(Boolean).join(', ');
 }
 
-// The import flags: where the items go.
 function importOptions(flags: Flags): { folder?: string; ignoreFolders: boolean } {
   const folder = flags['folder'];
   return { ...(typeof folder === 'string' && { folder }), ignoreFolders: flags['ignore-folders'] === true };
@@ -246,8 +243,8 @@ async function importBackup(path: string | undefined, vaultPath: string): Promis
   console.log(`${c.ok('✓')} ${importSummary(r.added, r.skipped, 0)}.`);
 }
 
-// An unencrypted export asks for the master password again (the key in memory is not proof the person at the keyboard knows it)
-// and for an explicit acknowledgement: --i-understand, or a y/N answer.
+// An unencrypted export asks for the master password again (the key in memory does not prove who is at the keyboard)
+// and for an explicit acknowledgement: --i-understand or a y/N answer.
 async function confirmPlainExport(vaultPath: string, acknowledged: boolean): Promise<void> {
   console.error(c.red('! ') + t('export.warning'));
   if (!acknowledged && !(await confirmT(t('cli.export.confirmPlain')))) throw new CliError(t('cli.cancelled'));
@@ -281,7 +278,7 @@ const commands: Record<string, Command | undefined> = {
     console.log(`\n${logo()}\n`);
     console.log(`  ${t('cli.ui.vault')} ${c.dim(vaultPath)}${vaultExists(vaultPath) ? '' : c.dim(' ' + t('cli.ui.willCreate'))}`);
     console.log(c.dim('  ' + t('cli.ui.listening') + '\n'));
-    // The token is not printed to the terminal by default: only if the browser doesn't open or with --print-url.
+    // The token stays out of the terminal unless the browser does not open or --print-url is given.
     const printUrl = () => {
       console.log(`  ${t('cli.ui.open')} ${c.bold(srv.url)}`);
       console.log(c.dim('  ' + t('cli.ui.linkNote') + '\n'));
@@ -297,7 +294,8 @@ const commands: Record<string, Command | undefined> = {
     };
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
-    return new Promise<void>(() => {}); // keeps the process alive
+    // Never settles: keeps the process alive.
+    return new Promise<void>(() => {});
   },
 
   async init({ vaultPath }) {
@@ -342,16 +340,14 @@ const commands: Record<string, Command | undefined> = {
       if (err instanceof ClipboardError) throw new CliError(`${errText(t, err)} ${t('cli.get.useShow')}`);
       throw err;
     }
-    // The vault key is no longer needed while we wait. (JS strings are immutable: the
-    // password itself only leaves memory when the process ends.)
+    // The vault key is not needed while waiting. The password string itself stays until exit, since JS strings are immutable.
     vault.key?.fill(0);
     if (!copied.concealed) console.log(`  ${c.warn('!')} ${t('clipboard.notConcealed')}`);
     const expiresAt = copied.expiresAt;
     if (!expiresAt) return console.log(`  ${c.ok('✓')} ${t('cli.get.copiedNoClear')}`);
 
-    // Stays alive until cleared: the timer lives in this process, and Ctrl+C (or closing the terminal) clears immediately.
-    // A detached child process would survive all of that, but couldn't show errors or a
-    // countdown, would be left orphaned and would require passing the hash through another channel; we prefer the live process.
+    // Stays alive until cleared: the timer lives in this process, and Ctrl+C or closing the terminal clears at once.
+    // A detached child would outlive the terminal but could not report errors or a countdown, and would need the hash passed to it.
     const uninstall = installExitHooks(clip, { exit: () => { process.stdout.write('\n'); process.exit(130); } });
     const paint = () => {
       const left = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
@@ -478,11 +474,12 @@ commands['start'] = commands['ui'];
 commands['ls'] = commands['list'];
 commands['gen'] = commands['generate'];
 
-// A write error of stdout other than EPIPE (see stdio.ts), told in the language main() resolved.
+/** Reports a stdout write error other than EPIPE, in the language main() resolved. */
 export function reportOutputError(err: unknown): void {
   process.stderr.write(c.red(`✗ ${errText(t, err)}`) + '\n');
 }
 
+/** Runs the CLI: parses `argv`, hardens permissions and dispatches the command. Failures set `process.exitCode`. */
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const { positional, flags, missing, unknown } = parseArgs(argv);
   const resolved = resolveForProcess({ flag: flags.lang === undefined ? undefined : String(flags.lang), home: defaultHome() });

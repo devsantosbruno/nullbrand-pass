@@ -1,8 +1,6 @@
-// Adapter for the nested JSON layout: `{ folders: [{ id, name }], items: [{ type, folderId, login | card | identity, ... }] }`,
-// the way several password managers write their unencrypted JSON export.
-// Supported item types: 1 = login, 2 = note, 3 = card, 4 = identity. Anything else is counted as ignored.
-//
-// The file is untrusted input: every value is read as `unknown` and narrowed here, field by field.
+// Adapter for the nested JSON layout `{ folders: [{ id, name }], items: [{ type, folderId, login | card | identity, ... }] }`,
+// as several password managers write their unencrypted export. Item types: 1 = login, 2 = note, 3 = card, 4 = identity; others are ignored.
+// The file is untrusted: every value is read as `unknown` and narrowed field by field.
 import { coded } from '../errors.js';
 import { isObjectLike, isUnknownArray } from '../shared/guards.js';
 import type { ImportAdapter, InterchangeItem, ParseResult } from './types.js';
@@ -14,10 +12,10 @@ const TYPE_IDENTITY = 4;
 
 type Common = Pick<InterchangeItem, 'name' | 'folder' | 'favorite' | 'createdAt'>;
 
-// `value || fallback` for a value that must end up a string. A non-string (a number, an object...) is not a usable text field.
+// `value || fallback` for a field that must be a string; any non-string is unusable.
 const text = (value: unknown, fallback: string = ''): string => (typeof value === 'string' && value ? value : fallback);
 
-// An entry of a list inside the file. null / undefined used to blow up with a TypeError on the first property read.
+// An entry of a list in the file. null and undefined are rejected; other non-objects become empty.
 function entry(value: unknown, where: string): Readonly<Record<string, unknown>> {
   if (value === null || value === undefined) throw coded('err.import.invalidEntry', `Invalid entry in the file (${where}).`, { where });
   return isObjectLike(value) ? value : {};
@@ -33,7 +31,7 @@ function fieldsToText(fields: unknown): string {
     .join('\n');
 }
 
-// "MM/YYYY" from the two separate fields, when both are there.
+// "MM/YYYY" from the two fields, when both exist.
 function cardExpiry(month: unknown, year: unknown): string {
   const m = text(month);
   const y = text(year);
@@ -63,11 +61,12 @@ function identityItem(common: Common, d: Readonly<Record<string, unknown>>, note
   };
 }
 
+/** Adapter for the nested JSON layout. */
 export const jsonNested: ImportAdapter = {
   id: 'json-nested',
 
-  // `items` is what makes it this layout. A `folders` list and items that all carry a numeric `type` make it more certain. A malformed
-  // entry still selects this adapter: parse() then says which entry is wrong, which is more useful than "unrecognized".
+  // `items` is what makes it this layout; a `folders` list and numeric `type` on every item add certainty. A malformed entry still
+  // selects this adapter, so parse() can say which entry is wrong instead of "unrecognized".
   detect(input) {
     if (!isObjectLike(input) || !isUnknownArray(input['items'])) return 0;
     const items = input['items'];
@@ -125,7 +124,7 @@ export const jsonNested: ImportAdapter = {
         items.push(identityItem(common, entry(it['identity'], 'identity'), notes));
       } else if (it['type'] === TYPE_CARD) {
         const card = entry(it['card'] || {}, 'card');
-        // The brand has no field of its own in the vault: it stays readable in the notes.
+        // The vault has no brand field, so it is kept in the notes.
         const brand = text(card['brand']);
         items.push({
           ...common,

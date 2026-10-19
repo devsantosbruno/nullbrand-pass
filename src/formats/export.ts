@@ -1,19 +1,21 @@
-// The plain (unencrypted) writers. They are lossy on purpose where the target layout has no place for a field, and they say so in
-// `warnings` instead of dropping data quietly: what has no counterpart goes into the notes as `key: value` lines.
+// The plain (unencrypted) writers. Where the target layout has no place for a field they are lossy on purpose, and say so in `warnings`
+// rather than drop data quietly: what has no counterpart goes into the notes as `key: value` lines.
 import { assertNever, ownedKeys } from '../shared/vault-types.js';
 import type { VaultItem } from '../shared/vault-types.js';
 import type { FormatWarning } from './types.js';
 
+/** A serialized export and what was lossy in it. */
 export interface ExportResult {
   text: string;
   warnings: FormatWarning[];
 }
+/** An {@link ExportResult} with the name and MIME type the file should get. */
 export interface PlainExport extends ExportResult {
   filename: string;
   mime: string;
 }
 
-// `key: value` for every filled field of the item's own type, the lines that carry what a flat layout cannot.
+// `key: value` lines for every filled field of the item's own type; they carry what a flat layout cannot.
 function detailLines(item: VaultItem, only: readonly string[] = ownedKeys(item.type)): string[] {
   const record: Readonly<Record<string, unknown>> = item;
   return only.flatMap((key) => {
@@ -26,13 +28,13 @@ const joinNotes = (...parts: readonly string[]): string => parts.filter(Boolean)
 
 // ---- JSON (nested layout) ----
 
-// "MM/YY" or "MM/YYYY" as the two separate fields the layout has.
+// Splits "MM/YY" or "MM/YYYY" into the layout's two fields.
 function splitExpiry(expiry: string): { month: string; year: string } | undefined {
   const match = /^(\d{1,2})\s*\/\s*(\d{2}|\d{4})$/.exec(expiry.trim());
   return match?.[1] !== undefined && match[2] !== undefined ? { month: match[1], year: match[2] } : undefined;
 }
 
-// Identity fields the layout has a place for; the rest (birth date, RG, PIS, CNPJ) travel in the notes.
+// Identity fields with no place in the layout; they travel in the notes.
 const IDENTITY_UNMAPPED = ['birthDate', 'rg', 'pis', 'cnpj'] as const;
 
 interface NestedItem {
@@ -122,7 +124,7 @@ function writeJson(items: readonly VaultItem[], folders: readonly string[]): Exp
   return { text: JSON.stringify(document, null, 2) + '\n', warnings };
 }
 
-// The vault's items as one unencrypted JSON file, with the name the file should get.
+/** Serializes the items and folders as one unencrypted JSON file. Callers must treat the result as sensitive. */
 export function exportPlain(items: readonly VaultItem[], folders: readonly string[], now: Date = new Date()): PlainExport {
   return { ...writeJson(items, folders), filename: `nullbrand-export-${now.toISOString().slice(0, 10)}.json`, mime: 'application/json; charset=utf-8' };
 }

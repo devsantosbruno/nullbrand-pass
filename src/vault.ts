@@ -1,5 +1,4 @@
-// Vault file: a single JSON with a plain-text header (version, KDF)
-// and the content (items) encrypted with AES-256-GCM. Nothing leaves this machine.
+// Vault file: one JSON document with a plain-text header (version, KDF) and the items encrypted with AES-256-GCM.
 import { promises as fs, existsSync } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -23,60 +22,60 @@ import {
   type VaultItem,
 } from './shared/vault-types.js';
 
+/** Value of the `format` field in every vault file. */
 export const FORMAT = 'nullbrand-vault';
-// v1: AAD = JSON.stringify(kdf) (depended on key order) and no KDF minimum.
-// v2: canonical AAD and validated KDF fields; v1 vaults or vaults with a KDF below the minimum are migrated.
-// The container is still JSON (the header was already versioned and authenticated), so the
-// KDF can become 'argon2id' in the future without changing the layout: just kdf.name and new parameters.
+// v1 AAD was JSON.stringify(kdf), which depends on key order; v2 uses a canonical AAD and validates the KDF fields.
+/** Current vault file version. Older versions, or a KDF below the minimum, are migrated on unlock. */
 export const VERSION = 2;
 
-// The plain-text part of the vault file.
+/** The plain-text part of the vault file. */
 export interface VaultHeader {
   format: string;
   version: number;
   kdf: KdfParams;
 }
-// What readVaultFile() returns: the header plus the encrypted payload.
+/** A parsed vault file: the header plus the encrypted payload. */
 export interface VaultFile extends VaultHeader {
   payload: EncryptedBox;
 }
 
+/** Returns the data directory: `NULLBRAND_HOME` if set, else `~/.nullbrand`. */
 export function defaultHome(): string {
   if (process.env.NULLBRAND_HOME) return process.env.NULLBRAND_HOME;
   return join(homedir(), '.nullbrand');
 }
 
+/** Returns the default vault path inside {@link defaultHome}. */
 export function defaultVaultPath(): string {
   return join(defaultHome(), 'vault.json');
 }
 
-// AES-GCM additional authenticated data (AAD): changing the version or any KDF parameter invalidates the vault.
-// (IV and tag are already verified by GCM itself.)
+// AES-GCM additional authenticated data: binds the version and every KDF parameter, so changing any of them invalidates the vault.
 function headerAad(header: VaultHeader): string {
   const { kdf } = header;
   if (header.version === 1) return `${header.format}:${header.version}:${JSON.stringify(kdf)}`;
   return [header.format, header.version, kdf.name, kdf.N, kdf.r, kdf.p, kdf.keyLen, kdf.salt].join(':');
 }
 
-// POSIX permissions (0700/0600) don't exist on Windows: there Node ignores `mode` and isolation
-// comes from the ACLs inherited from the user profile (%USERPROFILE%). Nothing to do on that platform.
+// Windows has no POSIX modes: Node ignores `mode` there and isolation comes from the ACLs inherited from the user profile.
 const IS_WIN = process.platform === 'win32';
 
+/** Flushes a directory entry to disk. A no-op on Windows, and tolerated where the file system does not support it. */
 export async function fsyncDir(dir: string): Promise<void> {
-  if (IS_WIN) return; // directories cannot be opened on Windows
+  if (IS_WIN) return;
   let fh: FileHandle | undefined;
   try {
     fh = await fs.open(dir, 'r');
     await fh.sync();
   } catch {
-    // some file systems don't support fsync on a directory; the data itself was already synced
+    // The file data was already synced.
   } finally {
     await fh?.close().catch(() => {});
   }
 }
 
-// Writes to a temporary file (same directory, 0600 on creation, independent of umask), fsyncs,
-// renames over the original and fsyncs the directory. If anything fails, the original stays intact.
+// Atomic write: temp file in the same directory created 0600 (independent of umask), fsync, rename, fsync the directory.
+// On any failure the original stays intact. `exclusive` refuses to replace an existing file.
 async function writeAtomic(path: string, data: string | Uint8Array, { exclusive = false }: { exclusive?: boolean } = {}): Promise<void> {
   const dir = dirname(path);
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
@@ -98,7 +97,7 @@ async function writeAtomic(path: string, data: string | Uint8Array, { exclusive 
   await fsyncDir(dir);
 }
 
-// Backup copy of the current file before rewriting it in another format.
+/** Copies the vault file to `<path>.bak-<timestamp>` (0600) and returns the new path. Never overwrites an existing backup. */
 export async function backupVaultFile(path: string): Promise<string> {
   const stamp = new Date().toISOString().replace(/[-:.]/g, '');
   const dest = `${path}.bak-${stamp}`;
@@ -110,28 +109,29 @@ type LabelKey = 'folder' | 'vault' | 'backup';
 const LABELS: Readonly<Record<LabelKey, string>> = { folder: 'Folder', vault: 'Vault', backup: 'Backup' };
 const OWNED_DIRS: readonly string[] = ['.nullbrand'];
 
-// One permission fix, in the form the callers can translate (see `detailed` below).
+/** One permission fix, in a form callers can translate. */
 export interface PermissionMessage {
   key: string;
   params: { target: string; from: string; to: string };
   text: string;
 }
+/** Options for {@link hardenPermissions}. */
 export interface HardenOptions {
+  /** Expected owner; injectable for tests. */
   uid?: number | undefined;
+  /** Return {@link PermissionMessage} objects instead of plain strings. */
   detailed?: boolean;
 }
 
-// On startup (with or without a vault): if the data directory, the vault or its local backups are more
-// open than 0700/0600, fixes them and returns short messages for the terminal. The directory is only
-// changed if it is nullbrand's data directory (never the cwd of someone who used --vault ./vault.json).
-// If the data directory or the vault belong to ANOTHER user (e.g. NULLBRAND_HOME pointing to a
-// shared folder someone created earlier), refuses to use them: the other owner could swap
-// the file or read it. `uid` is injectable for testing.
-// With `detailed`, returns [{ key, params, text }] so the caller can translate; otherwise plain strings.
 function isMissing(err: unknown): boolean {
   return isObjectLike(err) && err['code'] === 'ENOENT';
 }
 
+/**
+ * Tightens the data directory, the vault and its local backups to 0700/0600 and returns one message per fix.
+ * The directory is only changed when it is nullbrand's own data directory, never the cwd of `--vault ./vault.json`.
+ * @throws coded `err.vault.foreignOwner` when the directory or vault belongs to another user: that owner could swap or read the file.
+ */
 export async function hardenPermissions(path?: string, options?: HardenOptions & { detailed?: false }): Promise<string[]>;
 export async function hardenPermissions(path: string | undefined, options: HardenOptions & { detailed: true }): Promise<PermissionMessage[]>;
 export async function hardenPermissions(path?: string, options?: HardenOptions): Promise<(string | PermissionMessage)[]>;
@@ -179,16 +179,19 @@ function isEncryptedBox(value: unknown): value is EncryptedBox {
   return isObjectLike(value) && ['iv', 'tag', 'data'].every((k) => typeof value[k] === 'string');
 }
 
-// Final check of a parsed vault file whose parts were validated one by one in readVaultFile().
+// Final check of a parsed file whose parts readVaultFile() validated one by one.
 function isVaultFile(value: unknown): value is VaultFile {
   if (!isObjectLike(value)) return false;
   const { format, version, kdf, payload } = value;
   return typeof format === 'string' && typeof version === 'number' && isKdfParams(kdf) && isEncryptedBox(payload);
 }
 
+/**
+ * Reads and validates the plain-text structure of a vault file, without deriving a key.
+ * @throws coded `err.vault.*` for a foreign, newer or malformed file.
+ */
 export async function readVaultFile(path: string): Promise<VaultFile> {
   const raw: unknown = JSON.parse(await fs.readFile(path, 'utf8'));
-  // A non-object (null included) is not a vault file; null used to surface as a TypeError.
   if (!isObjectLike(raw)) throw coded('err.vault.notVault', 'This file is not a nullbrand vault.');
   if (raw['format'] !== FORMAT) throw coded('err.vault.notVault', 'This file is not a nullbrand vault.');
   const version = raw['version'];
@@ -204,29 +207,30 @@ export async function readVaultFile(path: string): Promise<VaultFile> {
   return raw;
 }
 
+/** Returns whether a file exists at the vault path. */
 export function vaultExists(path: string = defaultVaultPath()): boolean {
   return existsSync(path);
 }
 
-// Removes the vault file. Backups exported elsewhere are not touched.
+/** Deletes the vault file only; backups exported elsewhere are left alone. */
 export async function destroyVault(path: string = defaultVaultPath()): Promise<void> {
   await fs.unlink(path);
 }
 
-// Identity item fields (key → maximum length).
+/** Identity item fields and their maximum lengths. */
 export const IDENTITY_FIELDS = {
   fullName: 128, email: 254, phone: 32, birthDate: 10,
   rg: 32, cpf: 14, pis: 14, cnpj: 18, cnh: 20, passport: 20,
   address: 256, city: 128, state: 64, zip: 9, country: 64,
 } as const satisfies Record<IdentityKey, number>;
 
-// SSH Key item fields (key → maximum length).
+/** SSH key item fields and their maximum lengths. */
 export const SSH_FIELDS = {
   sshAlgo: 16, sshTitle: 128, sshPublicKey: 1000, sshFingerprint: 64, sshPrivateKey: 10000,
   sshHost: 253, sshUser: 64, sshPort: 5,
 } as const satisfies Record<SshKey, number>;
 
-// Host, user and port go into ~/.ssh/config: no spaces or line breaks.
+// Host, user and port end up in ~/.ssh/config, so they may not contain spaces or line breaks.
 function sshValue(key: string, v: string): string {
   if (key === 'sshHost' || key === 'sshUser') return v.replace(/\s+/g, '');
   if (key === 'sshPort') return v.replace(/\D/g, '');
@@ -234,18 +238,21 @@ function sshValue(key: string, v: string): string {
   return v.trim();
 }
 
-// What normalizeItem() reads: an object whose values are untrusted (UI body, CLI flags, an import).
+/** Untrusted item fields (UI body, CLI flags, import) read by {@link normalizeItem}. */
 export type ItemInput = Readonly<Record<string, unknown>>;
 
-// `id` and `createdAt` end up typed `string` in the stored item, so a value that was GIVEN (truthy) must be a string. Falsy means
-// "not given" exactly as before. A truthy non-string used to be stored as is and made the vault impossible to open next time.
+// `id` and `createdAt` are strings in the stored item: a given (truthy) non-string would make the vault unopenable. Falsy means "not given".
 function givenString(value: unknown, field: string): string {
   if (!value) return '';
   if (typeof value !== 'string') throw coded('err.vault.invalidField', `Invalid value for "${field}".`, { field });
   return value;
 }
 
-// Normalizes an item coming from the UI, the CLI or an import.
+/**
+ * Builds a complete, size-limited item from untrusted input; fields foreign to the item type are blanked.
+ * @param existing the item being edited; its `id` and `createdAt` win over the input.
+ * @throws coded `err.vault.invalidField` for a non-string `id`/`createdAt`.
+ */
 export function normalizeItem(input: ItemInput, existing: VaultItem | null = null): VaultItem {
   const now = new Date().toISOString();
   const str = (v: unknown, max: number = 10000): string => (typeof v === 'string' ? v.slice(0, max) : '');
@@ -274,7 +281,7 @@ export function normalizeItem(input: ItemInput, existing: VaultItem | null = nul
     createdAt: existing?.createdAt || givenString(input['createdAt'], 'createdAt') || now,
     updatedAt: now,
   };
-  // Always true for what was just built; it is what turns the flat object into the VaultItem union for the compiler.
+  // Always true here; it narrows the flat object to the VaultItem union.
   if (!isVaultItem(item)) throw coded('err.vault.invalidItem', 'Invalid vault item.', { position: 0, id: item.id, name: item.name, field: 'item' });
   return item;
 }
@@ -283,12 +290,15 @@ function invalidContent(field: string) {
   return coded('err.vault.invalidContent', `Invalid vault content (${field}).`, { field });
 }
 
-// Item read from disk -> complete item. PURE: only fills ABSENT fields with their defaults; it does not touch
-// id/createdAt/updatedAt, does not truncate or trim, keeps unknown extra fields and writes nothing (the file only changes on
-// the next save, as before). A missing `type` is a login (the original format had no `type`). Anything that cannot be
-// represented faithfully is rejected instead of being converted: converting would lose data on the next save.
+/**
+ * Turns an item read from disk into a complete item. Pure: it only fills absent fields with defaults, and keeps unknown extra fields.
+ * Anything that cannot be represented faithfully is rejected rather than converted, since converting would lose data on the next save.
+ * A missing `type` means `login`.
+ * @param index zero-based position, used so the error points at the item in the JSON.
+ * @throws coded `err.vault.invalidItem` or `err.vault.unknownItemType`.
+ */
 export function normalizeStoredItem(raw: unknown, index: number = 0): VaultItem {
-  // id/name/position let the user find the item in the JSON when fixing it by hand.
+  // Position, id and name let the user find the item when fixing the JSON by hand.
   const who = (): { position: number; id: string; name: string } => {
     const obj = isObjectLike(raw) && !Array.isArray(raw);
     const show = (v: unknown): string => (typeof v === 'string' && v ? v : '(none)');
@@ -340,14 +350,16 @@ function cleanFolderName(name: unknown): string {
   return clean;
 }
 
+/** Result of a successful migration: the old parameters and where the backup went. */
 export interface VaultMigration {
   from: { version: number; N: number; r: number; p: number };
   backup: string;
 }
 
-// What the encrypted payload of a vault holds: the (untrusted) items and folders.
+// The untrusted decrypted payload: items and folders.
 type VaultContent = Readonly<Record<string, unknown>>;
 
+/** An unlocked vault: decrypted items in memory, saved atomically after every change. */
 export class Vault {
   declare path: string;
   declare header: VaultHeader;
@@ -362,14 +374,19 @@ export class Vault {
     this.header = header;
     this.key = key;
     const rawItems = content['items'];
-    if (!isUnknownArray(rawItems)) throw invalidContent('items'); // missing/null is corruption, not "empty": the next save would erase the vault
+    // Missing or null is corruption, not "empty": the next save would erase the vault.
+    if (!isUnknownArray(rawItems)) throw invalidContent('items');
     this.items = rawItems.map((raw, i) => normalizeStoredItem(raw, i));
-    // Explicit folders (allow empty folders). Old vaults don't have this field.
+    // Explicit folders allow empty folders; older vaults have no such field.
     const rawFolders = content['folders'];
     if (rawFolders !== undefined && !isStringArray(rawFolders)) throw invalidContent('folders');
     this.folders = isStringArray(rawFolders) ? [...rawFolders] : [];
   }
 
+  /**
+   * Creates and saves a new empty vault.
+   * @throws coded `err.vault.exists` or `err.vault.passwordShort` (minimum 8 characters).
+   */
   static async create(password: string, path: string = defaultVaultPath()): Promise<Vault> {
     if (existsSync(path)) throw coded('err.vault.exists', `A vault already exists at ${path}`, { path });
     if (!password || password.length < 8) throw coded('err.vault.passwordShort', 'The master password must be at least 8 characters long.');
@@ -380,16 +397,17 @@ export class Vault {
     return vault;
   }
 
-  // migrate: false opens without rewriting anything (password confirmations, reading others' backups).
-  // Old vault (v1 or KDF below the minimum): after opening, makes a backup, re-derives with new
-  // parameters and rewrites. A failed migration does NOT block access: the original file stays intact and the
-  // reason is kept in vault.migrationError. On success: vault.migration = { from, backup }.
+  /**
+   * Opens a vault. An old one (v1, or a KDF below the minimum) is backed up and rewritten with fresh parameters; the outcome is in
+   * `migration`. A failed migration does not block access: the original file stays intact and the reason is in `migrationError`.
+   * @param migrate `false` opens without rewriting anything (password confirmation, reading someone else's backup).
+   * @throws {WrongPasswordError} when authentication fails.
+   */
   static async unlock(password: string, path: string = defaultVaultPath(), { migrate = true }: { migrate?: boolean } = {}): Promise<Vault> {
     const file = await readVaultFile(path);
     const header: VaultHeader = { format: file.format, version: file.version, kdf: file.kdf };
     const key = await deriveKey(toMasterPassword(password), header.kdf);
-    // The derived key must not outlive a failed open: decrypting, checking the content and building the Vault (which can refuse an
-    // invalid item, an unknown type or a bad content shape) all happen inside this try.
+    // The derived key must not outlive a failed open, and building the Vault can still refuse the content.
     let vault: Vault;
     try {
       const decrypted = decryptJson(key, file.payload, headerAad(header));
@@ -415,7 +433,7 @@ export class Vault {
     const key = await deriveKey(toMasterPassword(password), header.kdf);
     try {
       const text = this.serialize(header, key);
-      // Check that what goes to disk opens with the new key before touching the original.
+      // Prove the new file opens with the new key before touching the original.
       const written: unknown = JSON.parse(text);
       const payload = isObjectLike(written) ? written['payload'] : undefined;
       if (!isEncryptedBox(payload)) throw coded('err.vault.corrupted', 'Corrupted vault (missing payload).');
@@ -432,15 +450,18 @@ export class Vault {
     }
   }
 
+  /** Returns the vault file text with a freshly encrypted payload. */
   serialize(header: VaultHeader = this.header, key: DerivedKey = this.key): string {
     const payload = encryptJson(key, { items: this.items, folders: this.folders }, headerAad(header));
     return JSON.stringify({ ...header, updatedAt: new Date().toISOString(), payload }, null, 2) + '\n';
   }
 
+  /** Writes the vault atomically. */
   async save(): Promise<void> {
     await writeAtomic(this.path, this.serialize());
   }
 
+  /** Re-encrypts the vault under a new password with fresh KDF parameters. */
   async changePassword(newPassword: string): Promise<void> {
     if (!newPassword || newPassword.length < 8) throw coded('err.vault.passwordShort', 'The master password must be at least 8 characters long.');
     const header: VaultHeader = { format: FORMAT, version: VERSION, kdf: newKdfParams() };
@@ -448,7 +469,7 @@ export class Vault {
     try {
       await writeAtomic(this.path, this.serialize(header, key));
     } catch (err) {
-      key.fill(0); // write failed: the file and the in-memory key remain the old ones
+      key.fill(0);
       throw err;
     }
     this.key.fill(0);
@@ -456,12 +477,14 @@ export class Vault {
     this.key = key;
   }
 
+  /** Returns the items, favorites first, then by name. */
   list(): VaultItem[] {
     return [...this.items].sort(
       (a, b) => Number(b.favorite) - Number(a.favorite) || a.name.localeCompare(b.name, 'en')
     );
   }
 
+  /** Returns items whose id matches exactly, or whose name, username or URI contains `query` (case-insensitive). */
   find(query: string): VaultItem[] {
     const q = String(query).toLowerCase();
     return this.list().filter(
@@ -470,13 +493,13 @@ export class Vault {
     );
   }
 
+  /** Returns the item with this id, or `null`. */
   get(id: string): VaultItem | null {
     return this.items.find((i) => i.id === id) || null;
   }
 
-  // Applies `change` (which replaces this.items / this.folders, never mutates them in place) and saves. If the save rejects,
-  // the in-memory state goes back to exactly what it was and the original error is rethrown, so memory never shows
-  // something the disk does not have.
+  // Applies `change`, which must replace this.items/this.folders rather than mutate them, then saves.
+  // If the save rejects the previous state is restored, so memory never shows what the disk lacks.
   async #commit<T>(change: () => T): Promise<T> {
     const items = this.items;
     const folders = this.folders;
@@ -491,7 +514,7 @@ export class Vault {
     }
   }
 
-  // `input` is whatever the UI sent (an HTTP body): normalizeItem() reads it field by field.
+  /** Adds an item built from untrusted input. A given `id` is ignored. */
   async add(input: unknown): Promise<VaultItem> {
     const item = normalizeItem({ ...spreadOf(input), id: undefined });
     return this.#commit(() => {
@@ -500,6 +523,7 @@ export class Vault {
     });
   }
 
+  /** Merges untrusted input into an existing item. @throws coded `err.vault.itemNotFound`. */
   async update(id: string, input: unknown): Promise<VaultItem> {
     const idx = this.items.findIndex((i) => i.id === id);
     const current = this.items[idx];
@@ -511,6 +535,7 @@ export class Vault {
     });
   }
 
+  /** Deletes one item. @throws coded `err.vault.itemNotFound`. */
   async remove(id: string): Promise<void> {
     if (!this.items.some((i) => i.id === id)) throw coded('err.vault.itemNotFound', 'Item not found.');
     await this.#commit(() => {
@@ -518,6 +543,7 @@ export class Vault {
     });
   }
 
+  /** Deletes every item whose id is listed; unknown ids are ignored. */
   async removeMany(ids: readonly string[]): Promise<void> {
     const set = new Set(ids);
     await this.#commit(() => {
@@ -525,7 +551,7 @@ export class Vault {
     });
   }
 
-  // Explicit folders + folders used by items, without duplicates (case-insensitive).
+  /** Returns explicit folders plus those used by items, deduplicated case-insensitively and sorted. */
   listFolders(): string[] {
     const seen = new Map<string, string>();
     for (const f of [...this.folders, ...this.items.map((i) => i.folder)]) {
@@ -538,7 +564,7 @@ export class Vault {
     return this.listFolders().find((f) => f.toLowerCase() === name.toLowerCase()) || null;
   }
 
-  // Creates the folder (or returns the existing one with the same name).
+  /** Creates a folder, or returns the existing one with the same name. */
   async addFolder(name: unknown): Promise<string> {
     const clean = cleanFolderName(name);
     const existing = this.#canonicalFolder(clean);
@@ -549,7 +575,7 @@ export class Vault {
     });
   }
 
-  // Renames; if the new name already exists as another folder, the two are merged.
+  /** Renames a folder; if the new name is another existing folder, the two are merged. */
   async renameFolder(from: string, to: unknown): Promise<string> {
     const cleanTo = cleanFolderName(to);
     const source = this.#canonicalFolder(from);
@@ -563,7 +589,7 @@ export class Vault {
     });
   }
 
-  // Deletes the folder. By default its items become folderless; with deleteItems they are removed too.
+  /** Deletes a folder. Its items become folderless unless `deleteItems` is set, which removes them too. */
   async deleteFolder(name: unknown, { deleteItems = false }: { deleteItems?: boolean } = {}): Promise<{ count: number }> {
     const source = this.#canonicalFolder(String(name || ''));
     if (!source) throw coded('err.vault.folderNotFound', 'Folder not found.');
@@ -577,6 +603,7 @@ export class Vault {
     });
   }
 
+  /** Moves the listed items into `folder` (empty string for none). */
   async moveMany(ids: readonly string[], folder: string): Promise<void> {
     const set = new Set(ids);
     await this.#commit(() => {
@@ -584,12 +611,11 @@ export class Vault {
     });
   }
 
-  // Merges imported items, skipping exact duplicates (same name+username+password+URIs).
+  /** Merges imported items, skipping exact duplicates. Returns how many were added and skipped. */
   async merge(items: readonly Readonly<Record<string, unknown>>[]): Promise<{ added: number; skipped: number }> {
     const sig = (i: VaultItem): string => JSON.stringify([i.type, i.name, i.username, i.password, i.uris, i.notes, i.cardNumber, i.cardCvv, i.cpf, i.cnpj, i.passport, i.email, i.sshFingerprint]);
     const seen = new Set(this.items.map(sig));
-    // All-or-nothing: every item is normalized (and checked for duplicates) into this local list first. If any of them throws, this.items
-    // has not been touched, so a later save() of something else cannot write half of a failed import.
+    // All-or-nothing: normalize into a local list first, so a failure leaves this.items untouched and no later save() writes half an import.
     const fresh: VaultItem[] = [];
     let skipped = 0;
     for (const raw of items) {
@@ -609,32 +635,35 @@ export class Vault {
     });
   }
 
-  // Backup: the vault itself, already encrypted, in another file.
+  /** Writes the already-encrypted vault to another file. */
   async exportBackup(destPath: string): Promise<string> {
     await writeAtomic(destPath, this.serialize());
     return destPath;
   }
 }
 
-// Checks a master password against the vault file without touching the open vault. Rejects with a WrongPasswordError.
+/** Checks a master password against the vault file without touching the open vault. @throws {WrongPasswordError} */
 export async function verifyMasterPassword(password: string, path: string = defaultVaultPath()): Promise<void> {
   (await Vault.unlock(password, path, { migrate: false })).key.fill(0);
 }
 
-// Writes a file that holds secrets in the clear (an unencrypted export). It is created private to the owner (0600) and replaced
-// atomically, so it is never readable by anyone else, not even for a moment.
+/** Writes a file holding secrets in the clear (unencrypted export), created 0600 and replaced atomically so no one else can read it, even briefly. */
 export async function writePrivateFile(destPath: string, text: string): Promise<string> {
   await writeAtomic(destPath, text);
   return destPath;
 }
 
-// Reads a backup (another vault file) with its own password and returns the items.
+/** Opens another vault file with its own password and returns its items, without migrating it. */
 export async function readBackupItems(path: string, password: string): Promise<VaultItem[]> {
   const backup = await Vault.unlock(password, path, { migrate: false });
   backup.key.fill(0);
   return backup.items;
 }
 
+/**
+ * Same as {@link readBackupItems} for backup text that is already in memory (an upload).
+ * @throws coded `err.vault.notBackup` or `err.vault.backupVersion` for a file that is not a supported backup.
+ */
 export async function readBackupItemsFromText(text: string, password: string): Promise<VaultItem[]> {
   let raw: unknown;
   try {
@@ -660,7 +689,8 @@ export async function readBackupItemsFromText(text: string, password: string): P
     const content = decryptJson(key, payload, headerAad(header));
     if (!isObjectLike(content)) throw invalidContent('payload');
     const items = content['items'];
-    if (items === undefined) return []; // a backup is only read and merged, never saved over: a missing field is just "nothing to import"
+    // A backup is only read, never saved over, so a missing field just means nothing to import.
+    if (items === undefined) return [];
     if (!isUnknownArray(items)) throw invalidContent('items');
     return items.map((item, i) => normalizeStoredItem(item, i));
   } finally {

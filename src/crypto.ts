@@ -1,43 +1,44 @@
-// Cryptographic primitives for nullbrand.
-// Node built-in modules only: scrypt (KDF) + AES-256-GCM (authenticated encryption).
+// Node built-ins only: scrypt (KDF) + AES-256-GCM (authenticated encryption).
 import { coded } from './errors.js';
 import { isObjectLike } from './shared/guards.js';
 import { GCM_TAG_LEN, invalidBufferError, isDerivedKey, toAuthTag, toCiphertext, toNonce, toSalt, type DerivedKey, type MasterPassword, type Salt } from './brands.js';
 import { scrypt, randomBytes, createHash, createCipheriv, createDecipheriv, timingSafeEqual } from 'node:crypto';
 
-// KDF parameters as stored in the (plain-text) vault header.
+/** KDF parameters as stored in the plain-text vault header. */
 export interface KdfParams {
   readonly name: 'scrypt';
   readonly N: number;
   readonly r: number;
   readonly p: number;
   readonly keyLen: 32;
-  readonly salt: string; // base64
+  readonly salt: string;
 }
 
-// AES-256-GCM box as stored in the vault: every field is base64.
+/** AES-256-GCM box as stored in the vault; every field is base64. */
 export interface EncryptedBox {
   readonly iv: string;
   readonly tag: string;
   readonly data: string;
 }
 
-// Default scrypt parameters: N=2^17, r=8 → 128 MiB of memory (128·N·r bytes).
+/** Scrypt parameters for new vaults: N=2^17, r=8 (128 MiB of memory). */
 export const DEFAULT_KDF = Object.freeze({ name: 'scrypt', N: 2 ** 17, r: 8, p: 1, keyLen: 32 } as const);
 
-// Minimum accepted when WRITING; vaults below it still open, but are migrated (see vault.js).
+/** Minimum accepted when writing. Weaker vaults still open but are migrated on unlock. */
 export const MIN_KDF = Object.freeze({ N: 2 ** 17, r: 8, p: 1 } as const);
-// Maximum accepted when READING: the header is plain text, and a malicious file with a huge N
-// would make Node allocate GBs. The ceiling (N=2^20, r=16) is about 2 GiB of memory; files written by nullbrand always use r=8.
+// Read ceiling, higher than the write minimum: the header is plain text, so a hostile file with a huge N could force GBs of
+// allocation. N=2^20, r=16 is about 2 GiB; files written by nullbrand always use r=8.
 const MAX_KDF = Object.freeze({ N: 2 ** 20, r: 16, p: 4 } as const);
 const MIN_OPEN_N = 2 ** 10;
 
-// Known KDF identifiers. 'argon2id' is reserved in the format (crypto.argon2 only exists on
-// Node >= 24.7 and is still experimental), but is NOT accepted for deriving keys for now.
+/** KDF identifiers the format knows. `argon2id` is reserved but not accepted for derivation (`crypto.argon2` is experimental, Node >= 24.7). */
 export const KDF_IDS = Object.freeze(['scrypt', 'argon2id'] as const);
 
-// Validates the parameters read from the header before spending memory on them.
-// `kdf` is `unknown`: it comes straight from the vault file. On return it IS a KdfParams.
+/**
+ * Validates KDF parameters read from a vault header before any memory is spent on them.
+ * @param kdf untrusted input straight from the file; narrowed to {@link KdfParams} on return.
+ * @throws coded `err.vault.badHeader` when a field is missing or out of range.
+ */
 export function validateKdf(kdf: unknown): asserts kdf is KdfParams {
   function bad(why: string): never {
     throw coded('err.vault.badHeader', `Invalid vault header (KDF: ${why}).`, { why });
@@ -58,7 +59,7 @@ export function validateKdf(kdf: unknown): asserts kdf is KdfParams {
   if (typeof salt !== 'string' || Buffer.from(salt, 'base64').length < 16) bad('salt');
 }
 
-// validateKdf() as a yes/no question.
+/** Non-throwing form of {@link validateKdf}. */
 export function isKdfParams(kdf: unknown): kdf is KdfParams {
   try {
     validateKdf(kdf);
@@ -68,18 +69,24 @@ export function isKdfParams(kdf: unknown): kdf is KdfParams {
   }
 }
 
-// true if the parameters are below the current minimum (or belong to another KDF).
+/** Returns true when the parameters are below {@link MIN_KDF} or belong to another KDF. */
 export function isWeakKdf(kdf: KdfParams): boolean {
   return kdf.name !== 'scrypt' || kdf.N < MIN_KDF.N || kdf.r < MIN_KDF.r || kdf.p < MIN_KDF.p;
 }
 
-// Memory required by scrypt (OpenSSL: 128·r·(N + p + 2)) + 8 MiB of headroom.
-// Node's default (32 MiB) would make N=2^17 throw "memory limit exceeded".
+/**
+ * Returns the `maxmem` option scrypt needs: 128·r·(N + p + 2) bytes plus 8 MiB of headroom.
+ * Node's 32 MiB default makes N=2^17 throw "memory limit exceeded".
+ */
 export function scryptMaxmem({ N, r, p }: Pick<KdfParams, 'N' | 'r' | 'p'>): number {
   return 128 * r * (N + p + 2) + 8 * 1024 * 1024;
 }
 
-// Asynchronous (libuv thread pool): does not block the event loop during the ~0.5 s derivation.
+/**
+ * Derives the vault key on the libuv thread pool, so the ~0.5 s derivation does not block the event loop.
+ * The password is NFKC-normalized, and the internal copy is zeroed once scrypt is done.
+ * @throws coded `err.emptyPassword` for an empty password, or `err.vault.badHeader` for invalid parameters (as a rejection).
+ */
 export function deriveKey(password: MasterPassword, kdf: KdfParams): Promise<DerivedKey> {
   if (typeof password !== 'string' || password.length === 0) {
     return Promise.reject(coded('err.emptyPassword', 'Empty master password.'));
@@ -91,11 +98,10 @@ export function deriveKey(password: MasterPassword, kdf: KdfParams): Promise<Der
   } catch (err) {
     return Promise.reject(err);
   }
-  // A Buffer so the password copy can be zeroed afterwards (the original string is immutable).
+  // A Buffer, so the copy can be zeroed (the original string is immutable).
   const pw = Buffer.from(password.normalize('NFKC'), 'utf8');
   return new Promise((resolve, reject) => {
-    // scrypt() can also throw synchronously (invalid parameters): then the callback never runs, so the copy is zeroed here. The throw
-    // itself still propagates out of the executor and rejects the promise, exactly as before.
+    // scrypt() can throw synchronously on invalid parameters; the callback then never runs, so the copy is zeroed here.
     let started = false;
     try {
       scrypt(pw, salt, kdf.keyLen, { N: kdf.N, r: kdf.r, p: kdf.p, maxmem: scryptMaxmem(kdf) }, (...args) => {
@@ -105,7 +111,7 @@ export function deriveKey(password: MasterPassword, kdf: KdfParams): Promise<Der
           reject(err);
           return;
         }
-        // Inside this asynchronous callback nothing may throw (it would crash the process): a failed check rejects the promise.
+        // Nothing may throw in this async callback (it would crash the process): failures reject instead.
         if (!isDerivedKey(key)) {
           reject(invalidBufferError('derived key'));
           return;
@@ -119,11 +125,15 @@ export function deriveKey(password: MasterPassword, kdf: KdfParams): Promise<Der
   });
 }
 
+/** Returns the default scrypt parameters with a fresh random 16-byte salt. */
 export function newKdfParams(): KdfParams {
   return { ...DEFAULT_KDF, salt: randomBytes(16).toString('base64') };
 }
 
-// Encrypts a JSON value. "aad" binds the ciphertext to the file header.
+/**
+ * Encrypts a JSON value with a fresh random nonce.
+ * @param aad additional authenticated data; binds the ciphertext to the file header.
+ */
 export function encryptJson(key: DerivedKey, value: object, aad: string = ''): EncryptedBox {
   const iv = toNonce(randomBytes(12));
   const cipher = createCipheriv('aes-256-gcm', key, iv);
@@ -132,15 +142,22 @@ export function encryptJson(key: DerivedKey, value: object, aad: string = ''): E
   return { iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), data: data.toString('base64') };
 }
 
-// Rejects a box whose tag is not 16 bytes. Called when a file is read, before the (expensive) key derivation.
+/**
+ * Rejects a box whose tag is not 16 bytes.
+ * Call it when a file is read, before the expensive key derivation.
+ */
 export function checkBoxTag(box: EncryptedBox): void {
   toAuthTag(Buffer.from(box.tag, 'base64'));
 }
 
-// Returns the decrypted JSON document as `unknown`: the payload of a vault file is an input boundary, and every caller narrows it
-// right away with its own hand-written guard (see vault.ts).
+/**
+ * Decrypts and parses a box. The result is `unknown` because a vault payload is an input boundary: narrow it with a guard.
+ * @param aad must match the value given to {@link encryptJson}.
+ * @throws {WrongPasswordError} when authentication fails (wrong key, wrong AAD or tampered data).
+ * @throws coded `err.vault.corrupted` when the content is authentic but not valid JSON.
+ */
 export function decryptJson(key: DerivedKey, box: EncryptedBox, aad: string = ''): unknown {
-  // Two layers: the length check gives a clear error, and authTagLength makes OpenSSL itself refuse a truncated tag.
+  // The length check gives a clear error; authTagLength also makes OpenSSL refuse a truncated tag.
   const tag = toAuthTag(Buffer.from(box.tag, 'base64'));
   const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(box.iv, 'base64'), { authTagLength: GCM_TAG_LEN });
   if (aad) decipher.setAAD(Buffer.from(aad, 'utf8'));
@@ -149,11 +166,10 @@ export function decryptJson(key: DerivedKey, box: EncryptedBox, aad: string = ''
   try {
     plain = Buffer.concat([decipher.update(Buffer.from(box.data, 'base64')), decipher.final()]);
   } catch {
-    // Any throw from update()/final() means "not authentic". Never compare the message or `code`: OpenSSL may leave a stale
-    // error queued from an earlier failure, and a later good decryption must still succeed (see test/gcm-tag.test.ts).
+    // Never compare the OpenSSL message or `code`: a stale queued error can make a later good decryption fail.
     throw new WrongPasswordError();
   }
-  // Authentic but not JSON: the password was right, the content is damaged. Not "wrong password".
+  // Authentic but not JSON: the password was right and the content is damaged.
   try {
     const parsed: unknown = JSON.parse(plain.toString('utf8'));
     return parsed;
@@ -164,6 +180,7 @@ export function decryptJson(key: DerivedKey, box: EncryptedBox, aad: string = ''
   }
 }
 
+/** Thrown when GCM authentication fails. Deliberately does not tell a wrong password from a damaged file. */
 export class WrongPasswordError extends Error {
   declare readonly code: 'WRONG_PASSWORD';
   declare readonly key: 'err.wrongPassword';
@@ -176,13 +193,13 @@ export class WrongPasswordError extends Error {
   }
 }
 
-// Constant-time comparison. Both sides go through SHA-256 so they have equal length,
-// so not even the secret's length leaks through response time.
+/** Compares two secrets in constant time. Both sides are hashed first so their length does not leak. */
 export function safeEqual(a: string, b: string): boolean {
   const digest = (v: string): Buffer => createHash('sha256').update(String(v)).digest();
   return timingSafeEqual(digest(a), digest(b));
 }
 
+/** Returns a URL-safe random token of `bytes` random bytes (default 32). */
 export function randomToken(bytes: number = 32): string {
   return randomBytes(bytes).toString('base64url');
 }

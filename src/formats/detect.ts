@@ -1,12 +1,15 @@
-// Picks the adapter for a file. Nothing is guessed: a file no adapter is sure about is "unrecognized".
+// Picks the adapter for a file. Nothing is guessed: a file no adapter is sure about is unrecognized.
 import { coded } from '../errors.js';
 import { isObjectLike } from '../shared/guards.js';
 import type { ImportAdapter } from './types.js';
 
-// Below this an adapter is not sure enough to be trusted with the file.
+/** Score below which an adapter is not trusted with a file. */
 export const MIN_CONFIDENCE = 0.5;
 
-// The text as a JSON document of unknown shape. Deeply nested input that overflows the parser's stack is "not JSON" too.
+/**
+ * Parses text as a JSON document of unknown shape. Input so deeply nested that it overflows the parser's stack counts as not JSON too.
+ * @throws coded `err.import.notJson`.
+ */
 export function readJson(text: string): unknown {
   try {
     const parsed: unknown = JSON.parse(text.replace(/^﻿/, ''));
@@ -16,8 +19,10 @@ export function readJson(text: string): unknown {
   }
 }
 
-// The adapter with the highest score. It has to reach MIN_CONFIDENCE, and the best score may not be shared by two adapters unless it is
-// a certainty.
+/**
+ * Returns the adapter with the highest score. It must reach {@link MIN_CONFIDENCE}, and two adapters may not tie unless the score is a certainty.
+ * @throws coded `err.import.unrecognized`.
+ */
 export function pickAdapter(adapters: readonly ImportAdapter[], document: unknown): ImportAdapter {
   const scored = adapters.map((adapter) => ({ adapter, score: adapter.detect(document) })).sort((a, b) => b.score - a.score);
   const [best, runnerUp] = scored;
@@ -28,7 +33,11 @@ export function pickAdapter(adapters: readonly ImportAdapter[], document: unknow
   return best.adapter;
 }
 
-// Documents that are valid JSON but must not be fed to an adapter, with the reason the user needs.
+/**
+ * Rejects valid JSON that must not reach an adapter, with the reason the user needs.
+ * @param backupFormat the `format` value of a native backup.
+ * @throws coded `err.import.nativeBackup` or `err.import.encryptedForeign`.
+ */
 export function rejectKnownMisfits(document: unknown, backupFormat: string): void {
   if (!isObjectLike(document)) return;
   if (document['format'] === backupFormat) {

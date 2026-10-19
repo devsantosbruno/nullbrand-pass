@@ -1,7 +1,6 @@
-// Runtime guards for every answer of the local HTTP API, used by the web UI (and testable from Node). Pure: no Node or DOM APIs.
-// Each guard takes the `unknown` that came out of `response.json()` and either hands back the SAME value, now typed, or a `reason`.
-// The reason is built only from field names and the expected type, NEVER from values of the response (it can hold secrets and it
-// goes to the console). The types are the ones of ./api.ts and ./vault-types.ts.
+// Runtime guards for every answer of the local HTTP API, used by the web UI and testable from Node. Pure: no Node or DOM APIs.
+// A guard takes the `unknown` from `response.json()` and returns the same value, now typed, or a `reason`.
+// The reason is built from field names and expected types only, never from response values: they can hold secrets and the reason goes to the console.
 import type {
   ApiErrorResponse,
   ClipboardCopyResponse,
@@ -25,10 +24,12 @@ import type { Dict, Lang, LangSource } from './i18n.js';
 import { CARD_KEYS, IDENTITY_KEYS, ITEM_TYPES, LOGIN_KEYS, SSH_KEYS, isItemType, isVaultItem, ownedKeys } from './vault-types.js';
 import type { VaultItem } from './vault-types.js';
 
+/** The typed value, or why the input was rejected. */
 export type GuardResult<T> = { ok: true; value: T } | { ok: false; reason: string };
+/** Validates an `unknown` response body. */
 export type Guard<T> = (value: unknown) => GuardResult<T>;
 
-// undefined = nothing wrong; otherwise the reason (field names and expected types only).
+// `undefined` means nothing is wrong; otherwise the reason.
 type Problem = string | undefined;
 
 const LANG_SOURCES = ['flag', 'env', 'config', 'system', 'default'] as const satisfies readonly LangSource[];
@@ -44,12 +45,12 @@ function fail(reason: string): { ok: false; reason: string } {
   return { ok: false, reason };
 }
 
-// Builds a Guard from a hand-written predicate and the function that says what is wrong when the predicate fails.
+// Builds a Guard from a predicate and a function that explains a failure.
 function guardOf<T>(is: (value: unknown) => value is T, problem: (value: unknown) => Problem): Guard<T> {
   return (value) => (is(value) ? { ok: true, value } : fail(problem(value) ?? 'unexpected shape'));
 }
 
-// Checks `fields` of an object: [key, expected description, test].
+// One field check: [key, description of the expected value, test].
 type FieldCheck = readonly [key: string, expected: string, test: (value: unknown) => boolean];
 function fieldsProblem(value: unknown, path: string, checks: readonly FieldCheck[]): Problem {
   if (!isObjectLike(value) || Array.isArray(value)) return `${path}: expected object`;
@@ -65,7 +66,7 @@ const isNumber = (value: unknown): value is number => typeof value === 'number';
 const isTrue = (value: unknown): value is true => value === true;
 
 // ---- error answers ----
-// An error answer has a string `error`; `key` and `params` are optional. Anything else is not an error body.
+/** Narrows to an error body: a string `error`, with optional `key` and `params`. */
 export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   if (!isObjectLike(value) || Array.isArray(value)) return false;
   if (typeof value['error'] !== 'string') return false;
@@ -80,9 +81,10 @@ const okProblem = (value: unknown): Problem => fieldsProblem(value, 'response', 
 function isOkResponse(value: unknown): value is OkResponse {
   return okProblem(value) === undefined;
 }
+/** Guards `{ ok: true }`. */
 export const guardOkResponse: Guard<OkResponse> = guardOf(isOkResponse, okProblem);
 
-// POST /api/shutdown: ApiResponses types it `undefined` (the handler writes the answer itself), but what it writes is `{ ok: true }`.
+/** Guards the POST /api/shutdown ack. `ApiResponses` types it `undefined` because the handler writes the answer itself, but the body is `{ ok: true }`. */
 export const guardShutdownAck: Guard<undefined> = (value) => (isOkResponse(value) ? { ok: true, value: undefined } : fail(okProblem(value) ?? 'unexpected shape'));
 
 const countProblem = (value: unknown): Problem =>
@@ -90,7 +92,9 @@ const countProblem = (value: unknown): Problem =>
 function isCountResponse(value: unknown): value is CountResponse {
   return countProblem(value) === undefined;
 }
+/** Guards `{ ok: true, count }`. */
 export const guardCountResponse: Guard<CountResponse> = guardOf(isCountResponse, countProblem);
+/** Guards the folder-delete answer, which has the same shape as {@link guardCountResponse}. */
 export const guardFolderDeleteResponse: Guard<FolderDeleteResponse> = guardOf(isCountResponse, countProblem);
 
 const statusProblem = (value: unknown): Problem =>
@@ -106,6 +110,7 @@ const statusProblem = (value: unknown): Problem =>
 function isStatusResponse(value: unknown): value is StatusResponse {
   return statusProblem(value) === undefined;
 }
+/** Guards GET /api/status. */
 export const guardStatusResponse: Guard<StatusResponse> = guardOf(isStatusResponse, statusProblem);
 
 const configProblem = (value: unknown): Problem =>
@@ -117,15 +122,17 @@ const configProblem = (value: unknown): Problem =>
 function isConfigResponse(value: unknown): value is ConfigResponse {
   return configProblem(value) === undefined;
 }
+/** Guards GET and PUT /api/config. */
 export const guardConfigResponse: Guard<ConfigResponse> = guardOf(isConfigResponse, configProblem);
 
 const folderNameProblem = (value: unknown): Problem => fieldsProblem(value, 'response', [['name', 'string', isString]]);
 function isFolderNameResponse(value: unknown): value is FolderNameResponse {
   return folderNameProblem(value) === undefined;
 }
+/** Guards `{ name }`, the answer to creating or renaming a folder. */
 export const guardFolderNameResponse: Guard<FolderNameResponse> = guardOf(isFolderNameResponse, folderNameProblem);
 
-// GET /api/folders: a list of names. The answer is copied into a fresh mutable array (the UI keeps and edits its own list).
+/** Guards GET /api/folders. Returns a fresh mutable copy, since the UI keeps and edits its own list. */
 export const guardFolderList: Guard<string[]> = (value) => {
   if (!isStringArray(value)) return fail('folders: expected array of strings');
   return { ok: true, value: [...value] };
@@ -142,6 +149,7 @@ const sshKeyProblem = (value: unknown): Problem =>
 function isSshKeyResponse(value: unknown): value is SshKeyResponse {
   return sshKeyProblem(value) === undefined;
 }
+/** Guards the SSH generate and inspect answers. */
 export const guardSshKeyResponse: Guard<SshKeyResponse> = guardOf(isSshKeyResponse, sshKeyProblem);
 
 const clipboardProblem = (value: unknown): Problem =>
@@ -149,6 +157,7 @@ const clipboardProblem = (value: unknown): Problem =>
 function isClipboardCopyResponse(value: unknown): value is ClipboardCopyResponse {
   return clipboardProblem(value) === undefined;
 }
+/** Guards the POST /api/clipboard/copy answer. */
 export const guardClipboardCopyResponse: Guard<ClipboardCopyResponse> = guardOf(isClipboardCopyResponse, clipboardProblem);
 
 const generateProblem = (value: unknown): Problem =>
@@ -156,6 +165,7 @@ const generateProblem = (value: unknown): Problem =>
 function isGenerateResponse(value: unknown): value is GenerateResponse {
   return generateProblem(value) === undefined;
 }
+/** Guards the POST /api/generate answer. */
 export const guardGenerateResponse: Guard<GenerateResponse> = guardOf(isGenerateResponse, generateProblem);
 
 const mergeProblem = (value: unknown): Problem =>
@@ -163,6 +173,7 @@ const mergeProblem = (value: unknown): Problem =>
 function isMergeResponse(value: unknown): value is MergeResponse {
   return mergeProblem(value) === undefined;
 }
+/** Guards the answer to importing a backup. */
 export const guardMergeResponse: Guard<MergeResponse> = guardOf(isMergeResponse, mergeProblem);
 
 const warningProblem = (value: unknown, path: string): Problem =>
@@ -183,9 +194,11 @@ const importProblem = (value: unknown): Problem =>
     ['ignored', 'number', isNumber],
     ['warnings', 'array of warnings', (warnings) => warningsProblem(warnings) === undefined],
   ]);
+/** Narrows to the result of a committed import. */
 export function isImportResponse(value: unknown): value is ImportResponse {
   return importProblem(value) === undefined;
 }
+/** Guards the result of a committed import. */
 export const guardImportResponse: Guard<ImportResponse> = guardOf(isImportResponse, importProblem);
 
 const previewProblem = (value: unknown): Problem =>
@@ -194,12 +207,14 @@ const previewProblem = (value: unknown): Problem =>
     ['ignored', 'number', isNumber],
     ['warnings', 'array of warnings', (warnings) => warningsProblem(warnings) === undefined],
   ]);
+/** Narrows to the preview of a dry-run import. */
 export function isImportPreviewResponse(value: unknown): value is ImportPreviewResponse {
   return previewProblem(value) === undefined;
 }
+/** Guards the preview of a dry-run import. */
 export const guardImportPreviewResponse: Guard<ImportPreviewResponse> = guardOf(isImportPreviewResponse, previewProblem);
 
-// POST /api/import answers with a preview when the request was a dry run and with the result otherwise.
+/** Guards POST /api/import, which answers with a preview for a dry run and with the result otherwise. */
 export const guardImportAnswer: Guard<ImportResponse | ImportPreviewResponse> = (value) => {
   if (isImportResponse(value) || isImportPreviewResponse(value)) return { ok: true, value };
   return fail(importProblem(value) ?? previewProblem(value) ?? 'unexpected shape');
@@ -215,16 +230,16 @@ const exportProblem = (value: unknown): Problem =>
 function isExportResponse(value: unknown): value is ExportResponse {
   return exportProblem(value) === undefined;
 }
+/** Guards the unencrypted export answer. */
 export const guardExportResponse: Guard<ExportResponse> = guardOf(isExportResponse, exportProblem);
 
 // ---- vault items ----
 const BASE_STRING_KEYS = ['id', 'name', 'notes', 'folder', 'createdAt', 'updatedAt'] as const;
 const TYPED_KEY_GROUPS: readonly (readonly string[])[] = [LOGIN_KEYS, CARD_KEYS, IDENTITY_KEYS, SSH_KEYS];
-// What GET /api/items leaves out of each item (it sends "has one" flags instead).
+// GET /api/items leaves these out and sends "has one" flags instead.
 const SECRET_KEYS: readonly string[] = ['password', 'totp', 'sshPrivateKey'];
 
-// Says what is wrong with an item, with the same rules as isVaultItem() (secrets included) or, for `publicItem`, the same rules
-// minus the three secret fields plus the three flags.
+// Explains what is wrong with an item, using the rules of isVaultItem(). For `publicItem`, the three secret fields are replaced by their flags.
 function itemProblem(value: unknown, path: string, publicItem: boolean): Problem {
   if (!isObjectLike(value) || Array.isArray(value)) return `${path}: expected object`;
   const type = value['type'];
@@ -254,15 +269,15 @@ function itemProblem(value: unknown, path: string, publicItem: boolean): Problem
   return undefined;
 }
 
+/** Narrows to an item as GET /api/items sends it: no secrets, plus `hasPassword`, `hasTotp` and `hasSshKey`. */
 export function isPublicItem(value: unknown): value is PublicItem {
   return itemProblem(value, 'item', true) === undefined;
 }
 
-// The full item (GET /api/items/:id, POST /api/items, PUT /api/items/:id). It is the same object, narrowed: unknown extra
-// properties stay on it, as they stay on disk.
+/** Guards a full item (GET /api/items/:id, POST and PUT /api/items). It is the same object, narrowed; unknown extra properties stay on it. */
 export const guardVaultItem: Guard<VaultItem> = guardOf(isVaultItem, (value) => itemProblem(value, 'item', false));
 
-// GET /api/items: the list, without the secrets.
+/** Guards GET /api/items: the list without secrets. */
 export const guardPublicItems: Guard<PublicItem[]> = (value) => {
   if (!isUnknownArray(value)) return fail('items: expected array');
   const items: PublicItem[] = [];
@@ -273,10 +288,11 @@ export const guardPublicItems: Guard<PublicItem[]> = (value) => {
   return { ok: true, value: items };
 };
 
-// ---- translation dictionaries (GET /locales/<lang>.json; static files of the package, not an /api route) ----
+// ---- translation dictionaries (GET /locales/<lang>.json, a static file rather than an /api route) ----
 function isDict(value: unknown): value is Dict {
   return isObjectLike(value) && !Array.isArray(value) && Object.values(value).every(isString);
 }
+/** Guards a locale file: a flat object of strings. */
 export const guardDict: Guard<Dict> = (value) => {
   if (isDict(value)) return { ok: true, value };
   if (!isObjectLike(value) || Array.isArray(value)) return fail('dictionary: expected object');

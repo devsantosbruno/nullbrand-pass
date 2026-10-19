@@ -1,13 +1,12 @@
 // The local HTTP API: what each route takes and gives back. Shared by the server and the web UI. Pure: no Node or DOM APIs.
-// The request types describe what a well-behaved client sends; the server does not validate them (it reads each field defensively, the
-// way it always did), so they document the contract rather than guard it.
+// Request types describe what a well-behaved client sends. The server reads each field defensively instead of validating them, so they document the contract rather than guard it.
 import type { Lang, LangSource, TranslateParams } from './i18n.js';
 import type { VaultItem } from './vault-types.js';
 
-// Distributes over the union, so the omitted keys disappear from every variant (a plain Omit would flatten the union).
+// Distributes over the union so the keys vanish from every variant; a plain Omit would flatten it.
 type DistributiveOmit<T, K extends string> = T extends unknown ? Omit<T, K> : never;
 
-// An item as the list endpoint shows it: the secrets are replaced by "has one" flags.
+// An item as the list endpoint shows it: secrets replaced by "has one" flags.
 export type PublicItem = DistributiveOmit<VaultItem, 'password' | 'totp' | 'sshPrivateKey'> & {
   hasPassword: boolean;
   hasTotp: boolean;
@@ -63,7 +62,7 @@ export interface MergeResponse {
   added: number;
   skipped: number;
 }
-// A lossy or surprising step of an import / export, in the form the UI can translate (`key` + `params`, like an error).
+// A lossy or surprising step of an import or export, translatable by the UI through `key` and `params`.
 export interface ApiWarning {
   key: string;
   params: TranslateParams;
@@ -72,20 +71,20 @@ export interface ImportResponse extends MergeResponse {
   ignored: number;
   warnings: ApiWarning[];
 }
-// What an import would do, without doing it (`dryRun`).
+// What a `dryRun` import would do.
 export interface ImportPreviewResponse {
   count: number;
   ignored: number;
   warnings: ApiWarning[];
 }
-// The unencrypted export travels as JSON, not as a download, so the warnings come with it.
+// Travels as JSON rather than a download, so the warnings come with it.
 export interface ExportResponse {
   filename: string;
   mime: string;
   text: string;
   warnings: ApiWarning[];
 }
-// Every error answer: `key` + `params` let the UI translate it (see errText in i18n.ts).
+// Every error answer; `key` and `params` let the UI translate it.
 export interface ApiErrorResponse {
   error: string;
   key?: string | undefined;
@@ -142,7 +141,7 @@ export interface ImportRequest extends TextImportRequest {
   dryRun?: boolean;
 }
 export interface ExportRequest {
-  // The master password again: an unencrypted export is the one place the key held in memory is not enough.
+  // The key in memory is not enough proof for a plain-text export, so the master password is asked again.
   password: string;
   confirm: true;
 }
@@ -154,9 +153,9 @@ export interface ChangePasswordRequest {
   next: string;
 }
 
-// Error statuses: 401 no session, 423 vault locked (every route that needs the vault, folders included), 404 unknown item on
-// GET/PUT/DELETE /api/items/:id, 400 invalid input, 405 wrong method on / and /auth (the request body is discarded first).
-// Route key ("METHOD /path") -> what the handler answers. `undefined` means the handler wrote the response itself.
+// Route key ("METHOD /path") -> what the handler answers; `undefined` means the handler wrote the response itself.
+// Error statuses: 401 no session, 423 vault locked (any route that needs the vault), 404 unknown item on /api/items/:id,
+// 400 invalid input, 405 wrong method on / and /auth.
 export interface ApiResponses {
   'GET /api/status': StatusResponse;
   'GET /api/config': ConfigResponse;

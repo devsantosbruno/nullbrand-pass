@@ -1,24 +1,27 @@
-// SSH key generation and inspection (Ed25519 / RSA 4096) with no external dependencies.
+// SSH key generation and inspection (Ed25519 and RSA 4096) on Node built-ins only.
 import { coded } from './errors.js';
 import { isObjectLike } from './shared/guards.js';
 import { generateKeyPairSync, createPrivateKey, createHash, randomBytes, type JsonWebKey, type KeyObject } from 'node:crypto';
 
+/** Supported algorithms, mapped to their display names. */
 export const SSH_ALGOS = { ed25519: 'Ed25519', rsa4096: 'RSA 4096' } as const;
 export type SshAlgo = keyof typeof SSH_ALGOS;
 
+/** A key as stored in an item. `privateKey` is empty when only a public key was given. */
 export interface SshKeyInfo {
   readonly algo: SshAlgo;
   readonly publicKey: string;
   readonly fingerprint: string;
   readonly privateKey: string;
 }
+/** An {@link SshKeyInfo} plus the comment found in the key. */
 export interface InspectedSshKey extends SshKeyInfo {
   readonly comment: string;
 }
 
 const u32 = (n: number): Buffer => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b; };
 const sshString = (buf: Buffer): Buffer => Buffer.concat([u32(buf.length), buf]);
-// mpint: big-endian, with a leading 0 byte if the highest bit is set.
+// SSH mpint: big-endian, with a leading 0 byte when the high bit is set.
 const sshMpint = (buf: Buffer): Buffer => {
   let i = 0;
   while (i < buf.length - 1 && buf[i] === 0) i++;
@@ -27,7 +30,7 @@ const sshMpint = (buf: Buffer): Buffer => {
 };
 const b64url = (s: string): Buffer => Buffer.from(s, 'base64url');
 
-// The JWK of a key we generated or parsed always carries these members; a missing one is reported, not left to blow up later.
+// The JWK of a generated or parsed key carries these members; a missing one is reported rather than failing later.
 type JwkMember = 'x' | 'd' | 'n' | 'e' | 'p' | 'q' | 'qi';
 function jwkBytes(jwk: JsonWebKey, member: JwkMember): Buffer {
   const value = jwk[member];
@@ -40,7 +43,7 @@ function publicBlob(jwk: JsonWebKey): Buffer {
   return Buffer.concat([sshString(Buffer.from('ssh-rsa')), sshMpint(jwkBytes(jwk, 'e')), sshMpint(jwkBytes(jwk, 'n'))]);
 }
 
-// Private key in OpenSSH format (no passphrase), the same one `ssh-keygen` generates.
+// Private key in OpenSSH format without a passphrase, as `ssh-keygen` writes it.
 function openSshPrivate(jwk: JsonWebKey, blob: Buffer): string {
   const check = randomBytes(4);
   const parts = [check, check];
@@ -53,7 +56,8 @@ function openSshPrivate(jwk: JsonWebKey, blob: Buffer): string {
       sshMpint(jwkBytes(jwk, 'd')), sshMpint(jwkBytes(jwk, 'qi')), sshMpint(jwkBytes(jwk, 'p')), sshMpint(jwkBytes(jwk, 'q')),
     );
   }
-  parts.push(sshString(Buffer.alloc(0))); // embedded comment (empty)
+  // Empty embedded comment.
+  parts.push(sshString(Buffer.alloc(0)));
   let priv = Buffer.concat(parts);
   const pad = (8 - (priv.length % 8)) % 8;
   priv = Buffer.concat([priv, Buffer.from(Array.from({ length: pad }, (_, i) => i + 1))]);
@@ -80,23 +84,28 @@ function describe(privateKey: KeyObject, algo: SshAlgo): SshKeyInfo {
   };
 }
 
+/**
+ * Generates a key pair. Nothing is stored.
+ * @param algo `ed25519` or `rsa4096`.
+ * @throws coded `err.ssh.invalidAlgo` for any other value.
+ */
 export function generateSshKey(algo: string): SshKeyInfo {
   if (algo === 'ed25519') return describe(generateKeyPairSync('ed25519').privateKey, 'ed25519');
   if (algo === 'rsa4096') return describe(generateKeyPairSync('rsa', { modulusLength: 4096 }).privateKey, 'rsa4096');
   throw coded('err.ssh.invalidAlgo', 'Invalid algorithm. Use Ed25519 or RSA 4096.');
 }
 
-// Public key line (.pub): without a private key it can only be identified and stored.
+// A public key line (.pub) can only be identified and stored, since there is no private key.
 function inspectPublicLine(line: string): InspectedSshKey {
   const [type, b64, ...rest] = line.split(/\s+/);
-  // The caller's regex guarantees both exist; a missing one is reported instead of reaching Buffer.from(undefined).
+  // The caller's regex guarantees both exist; this narrows the types.
   if (type === undefined || b64 === undefined) throw coded('err.ssh.invalidKey', 'Invalid private key or unsupported format.');
   const blob = Buffer.from(b64, 'base64');
   let algo: SshAlgo;
   if (type === 'ssh-ed25519') algo = 'ed25519';
   else if (type === 'ssh-rsa') {
-    let o = 4 + blob.readUInt32BE(0); // skip the type
-    o += 4 + blob.readUInt32BE(o); // skip the exponent
+    let o = 4 + blob.readUInt32BE(0);
+    o += 4 + blob.readUInt32BE(o);
     const len = blob.readUInt32BE(o);
     if ((len - (blob[o + 4] === 0 ? 1 : 0)) * 8 !== 4096) throw coded('err.ssh.only4096', 'Only 4096-bit RSA keys are supported.');
     algo = 'rsa4096';
@@ -110,6 +119,10 @@ function inspectPublicLine(line: string): InspectedSshKey {
   };
 }
 
+/**
+ * Parses a pasted private key (OpenSSH or PEM) or a public key line and derives its public key, fingerprint and comment.
+ * @throws coded `err.ssh.*` for an empty, passphrase-protected, malformed or unsupported key.
+ */
 export function inspectSshKey(text: string): InspectedSshKey {
   const raw = String(text || '').trim();
   if (!raw) throw coded('err.ssh.pasteKey', 'Paste the private key.');
@@ -134,7 +147,7 @@ export function inspectSshKey(text: string): InspectedSshKey {
   throw coded('err.ssh.unsupportedType', 'Only Ed25519 and RSA 4096 keys are supported.');
 }
 
-// OpenSSH → KeyObject. Rebuilds via JWK from the fields of the private block.
+// Rebuilds a KeyObject, through JWK, from the fields of the OpenSSH private block.
 function fromOpenSsh(text: string): { key: KeyObject; comment: string } {
   const m = text.match(/-----BEGIN OPENSSH PRIVATE KEY-----([\s\S]+?)-----END OPENSSH PRIVATE KEY-----/);
   const body = m?.[1];
@@ -163,7 +176,7 @@ function fromOpenSsh(text: string): { key: KeyObject; comment: string } {
   if (type === 'ssh-rsa') {
     const n = rp(), e = rp(), d = rp(), iqmp = rp(), pr = rp(), q = rp();
     comment = rp().toString();
-    // dp/dq are not part of the OpenSSH format: OpenSSL recomputes them from p, q and d.
+    // dp and dq are not in the OpenSSH format, so they are recomputed from p, q and d.
     const big = (x: Buffer): bigint => BigInt('0x' + (x.toString('hex') || '0'));
     const dP = big(d) % (big(pr) - 1n), dQ = big(d) % (big(q) - 1n);
     const hex = (v: bigint): Buffer => Buffer.from(v.toString(16).padStart(Math.ceil(v.toString(16).length / 2) * 2, '0'), 'hex');

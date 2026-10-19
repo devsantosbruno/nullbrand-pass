@@ -2,12 +2,13 @@
 import { FOLDER_MAX } from '../shared/vault-types.js';
 import type { FormatWarning, InterchangeItem } from './types.js';
 
+/** Where imported items land. */
 export interface FolderPolicy {
-  // Optional folder every item goes into (or, with keepFolders, that prefixes the folders of the file).
+  /** Folder every item goes into, or, with `keepFolders`, a prefix for the folders of the file. */
   destination?: string | undefined;
-  // true: the folders of the file are kept. false: they are dropped.
+  /** Keep the folders written in the file (true) or drop them (false). */
   keepFolders: boolean;
-  // Folders that already exist in the vault. A destination that differs from one only by case reuses that spelling.
+  /** Folders already in the vault; a destination differing from one only by case reuses its spelling. */
   existing?: readonly string[] | undefined;
 }
 
@@ -16,6 +17,7 @@ function pickDestination({ destination = '', existing = [] }: FolderPolicy): str
   return existing.find((folder) => folder.toLowerCase() === wanted.toLowerCase()) ?? wanted;
 }
 
+/** Assigns a folder to every item under `policy`, warning about names that the vault will truncate. */
 export function applyFolderPolicy(items: readonly InterchangeItem[], policy: FolderPolicy): { items: InterchangeItem[]; warnings: FormatWarning[] } {
   const destination = pickDestination(policy);
   let tooLong = 0;
@@ -25,7 +27,7 @@ export function applyFolderPolicy(items: readonly InterchangeItem[], policy: Fol
     if (folder.length > FOLDER_MAX) tooLong++;
     return { ...item, folder };
   });
-  // The cut itself is done by the vault when it normalises the item.
+  // The vault does the actual truncation when it normalizes the item.
   const warnings: FormatWarning[] = tooLong > 0 ? [{ key: 'import.warn.folderTruncated', params: { count: tooLong, max: FOLDER_MAX } }] : [];
   return { items: placed, warnings };
 }

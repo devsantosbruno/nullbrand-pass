@@ -1,12 +1,12 @@
 // The shape of a vault item, shared by the vault, the HTTP API and the web UI. Pure: no Node or DOM APIs.
-// Items are stored FLAT: every item carries every field and the ones that do not belong to its type are the empty string
-// (and `uris` is []). The union below says exactly that, so a login can never hold a card number, and `isVaultItem()` checks it.
+// Items are stored flat: every item carries every field, and those foreign to its type are the empty string (`uris` is []).
+// The union below encodes that, so a login can never hold a card number, and `isVaultItem()` checks it at runtime.
 import { isObjectLike, isStringArray } from './guards.js';
 
 export const ITEM_TYPES = ['login', 'note', 'card', 'identity', 'ssh'] as const;
 export type ItemType = (typeof ITEM_TYPES)[number];
 
-// A folder name is a flat string of at most this many characters.
+// Maximum characters in a folder name.
 export const FOLDER_MAX = 200;
 
 export const LOGIN_KEYS = ['username', 'password', 'totp'] as const;
@@ -21,7 +21,7 @@ export type CardKey = (typeof CARD_KEYS)[number];
 export type IdentityKey = (typeof IDENTITY_KEYS)[number];
 export type SshKey = (typeof SSH_KEYS)[number];
 
-// Keys that do not belong to an item's type: always the empty string.
+// Keys foreign to an item's type: always the empty string.
 export type Empty<K extends string> = { [P in K]: '' };
 type Filled<K extends string> = { [P in K]: string };
 
@@ -42,16 +42,17 @@ export type IdentityItem = ItemCommon & { type: 'identity'; uris: readonly [] } 
 export type SshItem = ItemCommon & { type: 'ssh'; uris: readonly [] } & Filled<SshKey> & Empty<LoginKey | CardKey | IdentityKey>;
 export type VaultItem = LoginItem | NoteItem | CardItem | IdentityItem | SshItem;
 
-// Exhaustiveness check for `switch (item.type)`: adding a type to the union makes every switch that forgets it a compile error.
+/** Marks a branch that must be unreachable. Adding a type to the union turns every `switch` that forgets it into a compile error. */
 export function assertNever(value: never): never {
   throw new Error(`Unhandled case: ${String(value)}`);
 }
 
+/** Narrows to a known item type. */
 export function isItemType(value: unknown): value is ItemType {
   return ITEM_TYPES.some((type) => type === value);
 }
 
-// The keys an item of this type fills in (the other groups must be '').
+/** Returns the keys an item of this type fills in; every other group must be the empty string. */
 export function ownedKeys(type: ItemType): readonly string[] {
   switch (type) {
     case 'login':
@@ -71,7 +72,7 @@ export function ownedKeys(type: ItemType): readonly string[] {
 
 const ALL_TYPED_KEYS: readonly (readonly string[])[] = [LOGIN_KEYS, CARD_KEYS, IDENTITY_KEYS, SSH_KEYS];
 
-// True only for an object that satisfies the VaultItem union (extra unknown properties are allowed, as they are kept on disk).
+/** Narrows to an object that satisfies the {@link VaultItem} union. Unknown extra properties are allowed, since they are kept on disk. */
 export function isVaultItem(value: unknown): value is VaultItem {
   if (!isObjectLike(value)) return false;
   const type = value['type'];

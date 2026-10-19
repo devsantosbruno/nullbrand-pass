@@ -1,7 +1,6 @@
-// Local HTTP server for the Web UI. Listens ONLY on 127.0.0.1.
-// Protections: single-use bootstrap token (60 s) exchanged for an HttpOnly session cookie,
-// Host/Origin checks against DNS rebinding and malicious sites (on every request),
-// no CORS, strict CSP, idle lock and the key kept only in memory.
+// Local HTTP server for the web UI, bound to 127.0.0.1 only.
+// Defenses: single-use bootstrap token exchanged for an HttpOnly session cookie, Host/Origin checks on every request
+// (DNS rebinding, hostile sites), no CORS, strict CSP, idle lock, and the key kept only in memory.
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse, type OutgoingHttpHeaders } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +32,7 @@ const MIME: Readonly<Record<string, string>> = {
   '.json': 'application/json; charset=utf-8',
   '.ico': 'image/x-icon',
 };
+// Sent on every response. The CSP allows only same-origin resources and no inline script or style.
 const SECURITY_HEADERS: OutgoingHttpHeaders = {
   'Content-Security-Policy':
     "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
@@ -56,7 +56,7 @@ class HttpError extends Error {
   }
 }
 
-// An HttpError carrying the message / i18n key / params of a caught error (whatever was thrown).
+// Wraps whatever was thrown as an HttpError, keeping its message, i18n key and params.
 function fromErr(status: number, err: unknown): HttpError {
   const fields = isObjectLike(err) ? err : {};
   const message = fields['message'];
@@ -65,13 +65,13 @@ function fromErr(status: number, err: unknown): HttpError {
   return new HttpError(status, typeof message === 'string' ? message : '', typeof key === 'string' ? key : undefined, isTranslateParams(params) ? params : undefined);
 }
 
-// The JSON body of a request, for the routes that read fields from it. `null` used to be a TypeError at the first property read.
+// Returns the JSON body as a field map. A `null` body is rejected as invalid JSON; other non-objects become empty.
 function bodyFields(body: unknown): Readonly<Record<string, unknown>> {
   if (body === null) throw new HttpError(400, 'Invalid JSON.', 'err.http.invalidJson');
   return isObjectLike(body) ? body : {};
 }
 
-// The options of POST /api/import, read field by field from the (untrusted) body.
+// Reads the options of POST /api/import field by field from the untrusted body.
 function importOptions(fields: Readonly<Record<string, unknown>>, existingFolders: readonly string[]): ImportOptions {
   const folder = fields['folder'];
   return { ...(typeof folder === 'string' && { folder }), ignoreFolders: fields['ignoreFolders'] === true, existingFolders };
@@ -93,7 +93,7 @@ function publicItem(item: VaultItem): PublicItem {
 const MAX_CLIP_TEXT = 256 * 1024;
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-// What a route handler receives. `id` is the `:id` of the path, when the route has one.
+// What a route handler receives; `id` is the `:id` path segment, when the route has one.
 interface RouteContext {
   readonly id?: string | undefined;
   readonly body: unknown;
@@ -102,6 +102,7 @@ interface RouteContext {
 }
 type RouteHandlers = { [K in ApiRoute]: (ctx: RouteContext) => ApiResponses[K] | Promise<ApiResponses[K]> };
 
+/** Options for {@link startServer}. Everything is optional and defaults to a safe local setup. */
 export interface ServerOptions {
   vaultPath?: string;
   port?: number;
@@ -115,6 +116,7 @@ export interface ServerOptions {
   home?: string;
   langFlag?: unknown;
 }
+/** A started server. `url` carries the single-use bootstrap token. */
 export interface RunningServer {
   port: number;
   token: string;
@@ -122,6 +124,10 @@ export interface RunningServer {
   close: () => Promise<void>;
 }
 
+/**
+ * Starts the web UI server on a loopback address.
+ * @throws when `host` is not a loopback address; the server always binds 127.0.0.1.
+ */
 export function startServer({
   vaultPath = defaultVaultPath(),
   port = 0,
@@ -138,27 +144,27 @@ export function startServer({
   if (!['127.0.0.1', 'localhost', '::1'].includes(host)) {
     throw new Error('For safety, nullbrand only listens on 127.0.0.1.');
   }
-  // Always 127.0.0.1 (never 0.0.0.0 or ::), even if the caller asks for "localhost".
+  // Never 0.0.0.0 or ::, even when the caller asked for "localhost".
   host = '127.0.0.1';
-  // Language: flag > NULLBRAND_LANG > config.json > system. The browser refines the last two levels.
+  // Precedence: flag > NULLBRAND_LANG > config.json > system. The browser refines the last two.
   let langInfo = resolveForProcess({ flag: langFlag, home });
   let t = translator(langInfo.lang);
   let vault: Vault | null = null;
   let lastActivity = Date.now();
   let actualPort = port;
 
-  // Bootstrap token: single-use and expires in 60 s. Once exchanged, only the cookie is valid.
+  // Single-use and short-lived; once exchanged, only the session cookie is valid.
   let bootstrapToken: string | null = token;
   const bootstrapTimer = setTimeout(() => {
     bootstrapToken = null;
   }, bootstrapTtlMs);
   bootstrapTimer.unref();
   const sessions = new Set<string>();
-  const cookieName = (): string => `nullbrand_sid_${actualPort}`; // cookies don't isolate ports; the suffix avoids collisions between instances
+  // Cookies are not isolated by port, so the suffix avoids collisions between instances.
+  const cookieName = (): string => `nullbrand_sid_${actualPort}`;
 
-  // Locking the vault (manually, on idle) keeps the session so the unlock screen still works;
-  // only delete and shutdown drop the sessions (dropSessions = true).
-  // It also clears the clipboard (only if it still holds the copied password). Returns the clear promise.
+  // Zeroes the key and clears the clipboard (only if it still holds the copied password). Sessions survive a plain lock so the
+  // unlock screen keeps working; only delete and shutdown drop them.
   const lock = (dropSessions: boolean = false) => {
     if (vault?.key) vault.key.fill(0);
     vault = null;
@@ -169,7 +175,7 @@ export function startServer({
     if (vault && idleMinutes > 0 && Date.now() - lastActivity > idleMinutes * 60_000) {
       lock().then(
         (cleared) => {
-          // The password may still be on the clipboard: nobody is looking at the screen, so at least leave a trace.
+          // Nobody is watching the screen, so leave a trace in the terminal.
           if (cleared === 'failed' || cleared === 'unverified') console.error(t(`clipboard.idle.${cleared}`));
         },
         (err: unknown) => console.error(errText(t, err)),
@@ -183,8 +189,7 @@ export function startServer({
     return vault;
   };
 
-  // `:id` is always there on the routes that declare it; a missing one is "item not found", as vault.get/update/remove(undefined) were.
-  // A missing item is 404 (like GET /api/items/:id); any other error keeps the status it had.
+  // Maps "item not found" to 404, like GET /api/items/:id; any other error keeps its status.
   async function notFoundOp<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
@@ -193,8 +198,7 @@ export function startServer({
     }
   }
 
-  // Rejects with ECONNRESET ("aborted") when the client disconnects before the body is complete; the caller's try/catch turns that into
-  // an error answer (written to a socket that is already gone, which is harmless).
+  // Rejects with ECONNRESET when the client disconnects mid-body; the caller answers into a dead socket, which is harmless.
   async function readBody(req: IncomingMessage): Promise<unknown> {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -223,8 +227,7 @@ export function startServer({
     res.end(isBuffer ? body : JSON.stringify(body));
   }
 
-  // Runs before any route. Protects against DNS rebinding (Host) and CSRF (Origin).
-  // No CORS header is sent anywhere, so other origins can't read responses.
+  // Runs before any route: Host blocks DNS rebinding, Origin blocks CSRF. No CORS header is ever sent, so other origins cannot read responses.
   function checkHostAndOrigin(req: IncomingMessage): void {
     const hosts = [`127.0.0.1:${actualPort}`, `localhost:${actualPort}`];
     const requestHost = req.headers.host;
@@ -243,7 +246,7 @@ export function startServer({
     return '';
   }
 
-  // Compares against every session without exiting on the first match.
+  // Compares against every session, with no early exit, so timing does not reveal which one matched.
   function hasValidSession(req: IncomingMessage): boolean {
     const sid = sessionFromCookie(req);
     if (!sid) return false;
@@ -252,12 +255,12 @@ export function startServer({
     return ok;
   }
 
-  // GET /auth?t=<token>: exchanges the bootstrap token for a session cookie and cleans the URL.
+  // GET /auth?t=<token>: trades the bootstrap token for a session cookie, then redirects to a URL without the token.
   function handleAuth(_req: IncomingMessage, res: ServerResponse, url: URL): void {
     const given = url.searchParams.get('t') || '';
     const valid = bootstrapToken !== null && given !== '' && safeEqual(given, bootstrapToken);
     if (!valid) throw new HttpError(403, 'Access denied.', 'err.http.accessDenied');
-    bootstrapToken = null; // single use: invalidated on the first valid request
+    bootstrapToken = null;
     clearTimeout(bootstrapTimer);
     const sid = randomToken(32);
     sessions.add(sid);
@@ -270,8 +273,7 @@ export function startServer({
     res.end();
   }
 
-  // Vault validation errors (empty name, nonexistent folder) become 400.
-  // The vault is checked by the caller first (requireVault), so a locked vault stays 423.
+  // Vault validation errors (empty name, unknown folder) become 400. Callers run requireVault() first, so a locked vault stays 423.
   async function folderOp<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
@@ -293,7 +295,7 @@ export function startServer({
 
     'GET /api/config': () => ({ lang: langInfo.lang, source: langInfo.source, supported: SUPPORTED }),
 
-    // Explicit choice only: this is the one place that writes config.json.
+    // The only place that writes config.json, and only on an explicit choice.
     'PUT /api/config': async ({ body }) => {
       const given = bodyFields(body)['lang'];
       const lang = normalizeLang(given);
@@ -316,7 +318,8 @@ export function startServer({
       if (!vaultExists(vaultPath)) throw new HttpError(404, 'No vault created yet.', 'err.http.noVault');
       try {
         const opened = await Vault.unlock(String(bodyFields(body)['password'] || ''), vaultPath);
-        if (vault && vault !== opened) vault.key.fill(0); // a second unlock must not leave the previous key behind in memory
+        // A second unlock must not leave the previous key in memory.
+        if (vault && vault !== opened) vault.key.fill(0);
         vault = opened;
         if (opened.migration) console.error(t('server.vaultUpgraded', { version: opened.header.version, backup: opened.migration.backup }));
         else if (opened.migrationError) console.error(t('server.upgradeFailed', { reason: opened.migrationError }));
@@ -389,7 +392,7 @@ export function startServer({
       return { ok: true, ...(await folderOp(() => v.deleteFolder(fields['name'], { deleteItems: fields['deleteItems'] === true }))) };
     },
 
-    // Generates or inspects an SSH key; nothing is saved until the item is stored.
+    // Nothing is stored until the item itself is saved.
     'POST /api/ssh/generate': ({ body }) => {
       try {
         return generateSshKey(String(bodyFields(body)['algo'] || ''));
@@ -406,8 +409,8 @@ export function startServer({
       }
     },
 
-    // Copying and clearing happen here, in the Node process: the browser may be unfocused
-    // (and without clipboard permission) when the timer fires. `sensitive: false` copies without a timer.
+    // Copy and clear run in this process because the browser may be unfocused, and without clipboard permission, when the timer fires.
+    // `sensitive: false` copies without a timer.
     'POST /api/clipboard/copy': async ({ body }) => {
       requireVault();
       const fields = bodyFields(body);
@@ -457,7 +460,7 @@ export function startServer({
       return undefined;
     },
 
-    // An unencrypted export puts every password on disk in the clear, so it asks for the master password again and an explicit confirmation.
+    // Writes every password in the clear, so it requires the master password again and an explicit confirmation.
     'POST /api/export': async ({ body }) => {
       const v = requireVault();
       const fields = bodyFields(body);
@@ -491,7 +494,7 @@ export function startServer({
       return { ok: true };
     },
 
-    // Requires the master password, even when the vault is locked.
+    // Works on a locked vault, but still requires the master password.
     'POST /api/destroy': async ({ body }) => {
       if (!vaultExists(vaultPath)) throw new HttpError(404, 'No vault to delete.', 'err.http.noVaultToDelete');
       try {
@@ -511,7 +514,7 @@ export function startServer({
     'POST /api/shutdown': ({ res }) => {
       send(res, 200, { ok: true });
       setTimeout(async () => {
-        // Nothing may throw out of this callback (an unhandled rejection would crash the process): report it and still close.
+        // Nothing may throw out of this callback (it would crash the process): report, and still close.
         const report = (err: unknown): void => {
           console.error(errText(t, err));
           process.exitCode = 1;
@@ -585,7 +588,7 @@ export function startServer({
     res.end(data);
   }
 
-  // The status and body of an error answer: the same status / message / key / params the handlers always put in it.
+  // Builds the status and body of an error answer.
   function errorAnswer(err: unknown): { status: number; body: ApiErrorResponse } {
     const fields = isObjectLike(err) ? err : {};
     const status = fields['status'];
@@ -593,7 +596,7 @@ export function startServer({
     const key = fields['key'];
     const params = fields['params'];
     // Domain errors carry a status (HttpError) or an i18n key (coded). Anything else is a bug or a system failure (ENOSPC, EACCES…):
-    // it is not the client's fault, so it is logged here and answered as a generic 500 without leaking the message (paths).
+    // log it and answer a generic 500, without leaking the message (it may contain paths).
     if (!(typeof status === 'number' && status) && typeof key !== 'string') {
       console.error(errText(t, err));
       return { status: 500, body: { error: 'Unexpected error.', key: 'err.http.unexpected' } };
@@ -614,19 +617,19 @@ export function startServer({
       const url = new URL(req.url, `http://${req.headers.host}`);
       if (url.pathname === '/auth') {
         if (req.method !== 'GET') {
-          req.resume(); // discard the body, so the client gets the 405 instead of ECONNRESET
+          // Drain the body so the client sees the 405 instead of ECONNRESET.
+          req.resume();
           throw new HttpError(405, 'Method not allowed.', 'err.http.methodNotAllowed');
         }
         return handleAuth(req, res, url);
       }
-      // Everything requires a session, except /auth (which requires the token): another user on the
-      // computer who connects to the port doesn't get even the static files, only 401.
+      // Everything except /auth requires a session, so another local user hitting the port gets a 401, not even static files.
       if (!hasValidSession(req)) {
         throw new HttpError(401, 'Invalid or ended session. Run npx nullbrand again to open a new one.', 'err.http.noSession');
       }
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET') {
-          req.resume(); // discard the body, so the client gets the 405 instead of ECONNRESET
+          req.resume();
           throw new HttpError(405, 'Method not allowed.', 'err.http.methodNotAllowed');
         }
         if (url.pathname.startsWith('/locales/')) return await serveLocale(res, url.pathname);
@@ -641,7 +644,7 @@ export function startServer({
     } catch (err) {
       const { status, body } = errorAnswer(err);
       if (!res.headersSent) {
-        // /auth doesn't explain why it refused (wrong, used or expired token).
+        // /auth never says why it refused (wrong, used or expired token).
         if (req.url?.startsWith('/auth')) send(res, status, { error: 'Access denied.' });
         else send(res, status, body);
       }
@@ -651,7 +654,7 @@ export function startServer({
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, host, () => {
-      // Inside this asynchronous callback nothing may throw (it would crash the process): an address that is not a TCP one rejects instead.
+      // Nothing may throw in this async callback (it would crash the process): a non-TCP address rejects instead.
       const address = server.address();
       if (address === null || typeof address === 'string') {
         server.close();
