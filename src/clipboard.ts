@@ -133,18 +133,20 @@ export function macBackend(exec: Exec = run): Backend {
   return backend;
 }
 
-// clip.exe reads stdin in the OEM code page, which mangles accents, but accepts UTF-16LE when the text starts with a BOM.
-// Reading and clearing use fixed PowerShell commands, so no user data reaches a command line.
+// clip.exe reads stdin in the OEM code page, which mangles accents, and keeps a UTF-16 BOM inside the clipboard text.
+// Writing, reading and clearing use fixed PowerShell commands, with the text passed as UTF-8 bytes (no BOM) on stdin,
+// so no user data reaches a command line.
 // Windows sensitive writes are not marked (ExcludeClipboardContentFromMonitorProcessing needs P/Invoke); documented in SECURITY.md.
+const PS_WRITE = '$m = New-Object System.IO.MemoryStream; [Console]::OpenStandardInput().CopyTo($m); Set-Clipboard -Value ([System.Text.Encoding]::UTF8.GetString($m.ToArray()))';
 const PS_READ = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; [Console]::Out.Write((Get-Clipboard -Raw))';
 const PS_CLEAR = 'Set-Clipboard -Value $null';
 const PS_ARGS = (command: string): string[] => ['-NoProfile', '-NonInteractive', '-Command', command];
 
-/** Windows backend (clip.exe for writes, PowerShell for read and clear). */
+/** Windows backend (PowerShell Set-Clipboard and Get-Clipboard). */
 export function windowsBackend(exec: Exec = run, shell: string = 'powershell.exe'): Backend {
   return {
-    name: 'Windows (clip.exe)',
-    write: (text) => exec('clip.exe', [], { input: Buffer.from('﻿' + text, 'utf16le') }),
+    name: 'Windows (PowerShell)',
+    write: (text) => exec(shell, PS_ARGS(PS_WRITE), { input: text }),
     read: () => exec(shell, PS_ARGS(PS_READ), { capture: true }),
     clear: () => exec(shell, PS_ARGS(PS_CLEAR)),
   };

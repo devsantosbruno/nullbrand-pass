@@ -178,12 +178,13 @@ test('in every backend the password goes through stdin, never in arguments', asy
   }
 });
 
-test('windows: text goes as UTF-16LE with BOM (accents preserved in clip.exe)', async () => {
-  let sent: string | Uint8Array | undefined;
-  await windowsBackend(async (cmd, _args, { input }: RunOptions = {}) => { if (cmd === 'clip.exe') sent = input; return ''; }).write('action');
-  assert.ok(Buffer.isBuffer(sent));
-  assert.deepEqual([...sent.subarray(0, 2)], [0xff, 0xfe]);
-  assert.equal(sent.toString('utf16le'), '\uFEFFaction');
+test('windows: text goes to PowerShell as plain UTF-8 on stdin, without a BOM', async () => {
+  const sent: { cmd: string; args: readonly string[]; input: string | Uint8Array | undefined }[] = [];
+  await windowsBackend(async (cmd, args, { input }: RunOptions = {}) => (sent.push({ cmd, args, input }), '')).write('action');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]?.cmd, 'powershell.exe');
+  assert.equal(sent[0]?.input, 'action');
+  assert.ok(!sent[0]?.args.join(' ').includes('action'));
 });
 
 test('the text goes to the backend marked as sensitive by default', async () => {
