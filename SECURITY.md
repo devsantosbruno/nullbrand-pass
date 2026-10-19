@@ -25,6 +25,7 @@ This project has not had an independent security audit.
 - **Known limitations and open points:**
   - Decrypted items live in ordinary JavaScript strings, which cannot be reliably wiped from memory.
   - The minimum master password length is 8 characters; use a long passphrase.
+  - On Windows the clipboard copy is not excluded from Clipboard History or cloud clipboard sync (`ExcludeClipboardContentFromMonitorProcessing` is not set), so a copied password can appear in Win+V history until the 30 s clear runs. The clear empties the current clipboard, not entries already stored in that history. Turn Clipboard History off if that matters to you.
   - Concurrent unlock requests are not rate-limited (each costs ~128 MiB), although they require a valid local session.
   - Old `*.bak-*` files created by a format migration keep the old (weaker) key-derivation settings; delete them once the new vault opens.
   - A file-system attacker can roll the vault back to an older valid copy (inherent to a single-file design).

@@ -26,7 +26,15 @@ The command starts a web interface **on `127.0.0.1` only** and opens your browse
 
 ## Requirements
 
-Node.js 22.14 or newer. CI runs `npm run verify` on Linux, macOS and Windows with Node 22.14.0 and the current LTS.
+Node.js 22.14 or newer. CI runs `npm run verify` and the real-clipboard tests on every push and pull request:
+
+| OS (runner) | Node |
+| --- | --- |
+| Linux (`ubuntu-latest`, X11 via xvfb + xclip) | 22.14.0, current LTS |
+| macOS (`macos-latest`) | 22.14.0, current LTS |
+| Windows (`windows-latest`) | 22.14.0, current LTS |
+
+Wayland (`wl-clipboard`) and `xsel` are covered by unit tests with a fake command runner only.
 
 Linux: copying to the clipboard needs `xclip`, `xsel` or `wl-clipboard` installed.
 
@@ -136,7 +144,7 @@ The file has a plain-text header (format, version, scrypt parameters and salt) a
 | XSS / third-party scripts | CSP `default-src 'none'`, no external resources, data always rendered with `textContent` |
 | Leaving the vault open | Automatic lock on inactivity (15 min); the key lives only in memory and is zeroed on lock |
 | Theft of the vault file | Brute force is limited by scrypt's cost (~128 MiB per attempt) — use a long master password |
-| Forgotten copied password | Copying is done by the Node process (password via stdin, never in arguments). After 30 s (`--clear <s>`), on lock and on quit, the clipboard is only cleared if it still contains the password (SHA-256 comparison). On macOS the copy is marked as sensitive for clipboard history managers |
+| Forgotten copied password | Copying is done by the Node process (password via stdin, never in arguments). After 30 s (`--clear <s>`), on lock and on quit, the clipboard is only cleared if it still contains the password (SHA-256 comparison). On macOS the copy is marked as sensitive for clipboard history managers; on Windows it is not (see [SECURITY.md](SECURITY.md)) |
 
 **Privacy:** nullbrand has no telemetry, no analytics, no update checks and makes no outbound network connections. The only listening socket is `127.0.0.1`. It collects nothing, so there is no personal data to process or share.
 

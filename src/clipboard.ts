@@ -135,7 +135,7 @@ export function macBackend(exec: Exec = run): Backend {
 
 // clip.exe reads stdin in the OEM code page, which mangles accents, but accepts UTF-16LE when the text starts with a BOM.
 // Reading and clearing use fixed PowerShell commands, so no user data reaches a command line.
-// Windows sensitive writes are not marked (ExcludeClipboardContentFromMonitorProcessing needs P/Invoke and cannot be tested here).
+// Windows sensitive writes are not marked (ExcludeClipboardContentFromMonitorProcessing needs P/Invoke); documented in SECURITY.md.
 const PS_READ = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; [Console]::Out.Write((Get-Clipboard -Raw))';
 const PS_CLEAR = 'Set-Clipboard -Value $null';
 const PS_ARGS = (command: string): string[] => ['-NoProfile', '-NonInteractive', '-Command', command];
