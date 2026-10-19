@@ -170,7 +170,7 @@ src/server.ts               local HTTP server and API
 src/cli.ts                  CLI commands
 src/i18n.ts                 language resolution, config.json (Node side)
 src/shared/                 code shared by Node and the browser (types, guards, i18n)
-src/web/                    web interface logic (app.ts)
+src/web/                    browser code: app.ts (composition), features/ (one per area), ui/ (reusable components)
 static/                     index.html, styles.css, favicon.svg
 locales/                    en.json, pt.json (shared by the CLI and the UI)
 ```
