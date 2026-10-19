@@ -79,7 +79,6 @@ test('API errors carry an i18n key so the UI can translate them', async () => {
   await withServer({}, async ({ call }) => {
     assert.equal((await call('POST', '/api/setup', { password: 'strong-master-password' })).status, 200);
     await call('POST', '/api/lock');
-    // lock drops the session; get a fresh server-side check through an endpoint that needs the vault
     const r = await call('GET', '/api/items');
     assert.ok([401, 423].includes(r.status));
     const body = await jsonRecord(r);

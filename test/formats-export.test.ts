@@ -1,4 +1,3 @@
-// Spec 04 — the plain writers: what they keep, what they say they lose, and the guard around writing the file.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
@@ -22,7 +21,6 @@ const ITEMS: VaultItem[] = [
 ];
 const FOLDERS = ['Work'];
 
-// The same fields in the same place, for what the layout can hold.
 const same = (a: VaultItem, b: VaultItem, fields: readonly string[]): void => {
   const x: Readonly<Record<string, unknown>> = a;
   const y: Readonly<Record<string, unknown>> = b;

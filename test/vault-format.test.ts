@@ -16,7 +16,6 @@ const tmp = () => fs.mkdtemp(join(tmpdir(), 'nb-fmt-'));
 const mode = async (p: string) => (await fs.stat(p)).mode & 0o777;
 const PW = 'test-master-password';
 
-// Vault in the old format (v1, AAD = JSON.stringify(kdf)) with a configurable KDF.
 async function writeLegacy(path: string, { N = 2 ** 14, items = [{ id: '1', name: 'Old', password: 'abc' }] }: { N?: number; items?: readonly unknown[] } = {}) {
   const kdf: KdfParams = { name: 'scrypt', N, r: 8, p: 1, keyLen: 32, salt: randomBytes(16).toString('base64') };
   const header = { format: 'nullbrand-vault', version: 1, kdf };
@@ -28,7 +27,7 @@ async function writeLegacy(path: string, { N = 2 ** 14, items = [{ id: '1', name
 const listDir = async (dir: string) => (await fs.readdir(dir)).sort();
 
 test('new vault: v2 header, strong KDF, salt/IV/tag and 0700/0600 permissions', async () => {
-  const dir = join(await tmp(), 'data'); // directory created by the vault itself
+  const dir = join(await tmp(), 'data');
   const path = join(dir, 'vault.json');
   await Vault.create(PW, path);
   const f = parseJsonObject(await fs.readFile(path, 'utf8'));
@@ -63,7 +62,6 @@ for (const N of [2 ** 14, 2 ** 17]) {
     assert.equal(v.header.version, 2);
     assert.ok(v.header.kdf.N >= 2 ** 17);
 
-    // byte-for-byte backup of the old file
     const baks = (await listDir(dir)).filter((n) => n.startsWith('vault.json.bak-'));
     assert.equal(baks.length, 1);
     const bak = at(baks, 0);
@@ -71,7 +69,6 @@ for (const N of [2 ** 14, 2 ** 17]) {
     assert.equal(migration.backup, join(dir, bak));
     if (POSIX) assert.equal(await mode(join(dir, bak)), 0o600);
 
-    // new file: v2, opens with the same password, and the second unlock doesn't migrate again
     const f = parseJsonObject(await fs.readFile(path, 'utf8'));
     assert.equal(f['version'], 2);
     assert.equal(f['format'], 'nullbrand-vault');
@@ -94,8 +91,6 @@ test('migrate:false opens the old vault without rewriting anything', async () =>
   assert.deepEqual(await listDir(dir), ['vault.json']);
 });
 
-// Temporarily replaces an fs.promises method (vault.ts uses the same object). In Node `fs.promises` is a plain, mutable object; the
-// declarations make its members read-only, so the swap goes through a mutable view of just the two methods the tests replace.
 type SwappableFs = { -readonly [K in 'rename' | 'open']: (typeof fs)[K] };
 const swappable: SwappableFs = fs;
 async function withFsFailure<K extends keyof SwappableFs, T>(method: K, wrap: (orig: SwappableFs[K]) => SwappableFs[K], fn: () => Promise<T>): Promise<T> {
@@ -133,9 +128,7 @@ for (const { name, run } of writeFailures) {
     });
     assert.deepEqual(await fs.readFile(path), before);
     assert.deepEqual(await listDir(dir), ['vault.json']);
-    // the old password still works, and the in-memory key was not swapped
     assert.equal(at((await Vault.unlock(PW, path)).items, 0).name, 'Important');
-    // memory did not move ahead of disk (spec 10): the failed "New" is gone, the next good write persists only what the user saw
     assert.deepEqual(v.items.map((i) => i.name), ['Important']);
     await v.add({ name: 'Later', password: 'r' });
     const names = (await Vault.unlock(PW, path)).items.map((i) => i.name);
@@ -154,7 +147,6 @@ test('migration that fails on write: unlock works and the old file stays intact'
   assert.equal(v.header.version, 1);
   assert.deepEqual(await fs.readFile(path), before);
   assert.ok((await listDir(dir)).every((n) => n === 'vault.json' || n.includes('.bak-')), 'no .tmp');
-  // without the failure, the next open migrates normally
   assert.equal((await Vault.unlock(PW, path)).header.version, 2);
 });
 

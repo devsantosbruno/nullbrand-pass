@@ -1,12 +1,9 @@
-// The editor's masks and validators (src/web/ui/masks.ts, validators.ts). They moved out of app.ts unchanged: the cases below are the
-// ones the old code answered, so a change in what a field accepts or how it is formatted shows up here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { digits, fmtCardExpiry, fmtCardNumber, maskDate, maskDigits, maskPhone } from '../src/web/ui/masks.js';
 import { FIELD_VALIDATORS, luhn, validCnpj, validCpf } from '../src/web/ui/validators.js';
 import type { Say, ValidatedField } from '../src/web/ui/validators.js';
 
-// A translator that shows the key (and the fixed params), so the tests pin WHICH message a value gets.
 const say: Say = (key, params) => (params ? `${key}${JSON.stringify(params)}` : key);
 const check = (field: ValidatedField, value: string): string => FIELD_VALIDATORS[field](value, say);
 const YEAR = 2026;

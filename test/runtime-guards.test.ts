@@ -1,4 +1,3 @@
-// Stage 5a: the explicit-failure guards. Each one replaces what used to be a TypeError (or, for the password prompt, a silent echo).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -11,7 +10,6 @@ import type { ChildProcess, ChildReadable, ChildWritable } from 'node:child_proc
 const PROMPT_URL = new URL('../src/prompt.js', import.meta.url).href;
 const childOut = (script: string, input: string) => execFileSync(process.execPath, ['--input-type=module', '-e', script], { input, encoding: 'utf8', env: { ...process.env, NODE_NO_WARNINGS: '1' } });
 
-// Script that removes readline's private _writeToOutput from every prototype before the prompt module creates its interface.
 const WITHOUT_PRIVATE_API = `
 import { createInterface } from 'node:readline';
 import { PassThrough } from 'node:stream';
@@ -46,7 +44,6 @@ test('prompt: without _writeToOutput the password is NOT asked (typed error, que
   assert.match(out, /\{"outcome":"refused err\.prompt\.cannotMask","name":"bob"\}/);
 });
 
-// A child process that has no stdin pipe (stdio[0] not 'pipe', or a failed spawn).
 class FakeReadable extends EventEmitter implements ChildReadable {}
 class FakePipe implements ChildWritable {
   readonly chunks: (string | Uint8Array | undefined)[] = [];
@@ -134,7 +131,6 @@ test('resolveForProcess without a data directory still ignores the config file, 
   assert.equal(resolveForProcess({ env: {}, system: 'en-US' }).source, 'system');
 });
 
-// Spec 12: after the input closed, ask() rejects instead of hanging. The child gets a short timeout so a hang fails the test.
 const askTwice = `import { ask, closePrompt } from ${JSON.stringify(PROMPT_URL)};
   const out = [];
   for (const [q, o] of [['A: ', {}], ['B: ', { hidden: true }]]) {

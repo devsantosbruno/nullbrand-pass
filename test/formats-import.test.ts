@@ -1,4 +1,3 @@
-// Spec 04 — the one import flow: detection, the folder options, the limits and hostile input.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -28,7 +27,6 @@ const login = (item: InterchangeItem | undefined) => {
   return item;
 };
 
-// ---- detection ----
 
 test('detect: the layout is recognised without being told which it is; a BOM and leading blanks do not hide it', () => {
   assert.equal(planImport(NESTED).items.length, 1);
@@ -55,7 +53,6 @@ test('detect: an encrypted foreign export and a nullbrand backup get their own m
   assert.equal(keyOf(() => planImport(JSON.stringify({ format: 'nullbrand-vault', version: 2 }))), 'err.import.nativeBackup');
 });
 
-// ---- folders ----
 
 const sample = (folder: string): InterchangeItem => ({ type: 'note', name: 'n', folder, favorite: false, createdAt: undefined, notes: '' });
 const placed = (folder: string, policy: Parameters<typeof applyFolderPolicy>[1]) => at(applyFolderPolicy([sample(folder)], policy).items, 0).folder;
@@ -81,7 +78,6 @@ test('folders: they apply to a parsed file through the options', () => {
   assert.equal(at(planImport(NESTED, { folder: 'Imported', ignoreFolders: true }).items, 0).folder, 'Imported');
 });
 
-// ---- limits and hostile input ----
 
 test('limits: a file over 25 MiB is refused before it is parsed', () => {
   assert.equal(keyOf(() => parseImport('a'.repeat(MAX_IMPORT_BYTES + 1))), 'err.import.tooLarge');
@@ -120,7 +116,6 @@ test('a card, an identity and a login in the nested layout all come out as the r
   assert.deepEqual([person.fullName, person.cpf, person.cnh, person.passport, person.address, person.zip], ['Jane Doe', '123', '456', 'X1', 'Street 1', '01000']);
 });
 
-// ---- a real export file ----
 
 test('fixture nested.json: both logins come in, with and without a folder, and the dates are kept', () => {
   const plan = planImport(readFileSync(new URL('./fixtures/nested.json', import.meta.url), 'utf8'));

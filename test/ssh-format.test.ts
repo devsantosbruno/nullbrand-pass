@@ -1,4 +1,3 @@
-// How an SSH key pair is written out (src/web/ssh-format.ts): names, the ~/.ssh/config entry and the hand-written .zip.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SSH_ALGOS, sshConfig, sshFileName, sshKeyPairFiles, sshPubLine, sshSlug, zipParts } from '../src/web/ssh-format.js';
@@ -34,7 +33,6 @@ test('key pair files: private 600, public 644 (only when there is one), both end
   assert.equal(sshKeyPairFiles({ name: 'x', algo: 'rsa4096', privateKey: 'P', publicKey: '' }).files.length, 1);
 });
 
-// Reads the archive back with the layout of the ZIP spec (APPNOTE 4.3), so the test checks the format and not the writer.
 function readZip(bytes: Uint8Array): { name: string; text: string; mode: number; crc: number }[] {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const eocd = bytes.byteLength - 22;
@@ -77,6 +75,5 @@ test('zip: the archive reads back with the names, contents and Unix modes it was
   const files = [{ name: 'id_ed25519_x', text: '-----BEGIN-----\nsecret\n', mode: 0o600 }, { name: 'id_ed25519_x.pub', text: 'ssh-ed25519 AAAA\n', mode: 0o644 }];
   const entries = readZip(join(zipParts(files, new Date(2026, 9, 19, 12, 30, 40))));
   assert.deepEqual(entries.map((e) => [e.name, e.text, e.mode]), files.map((f) => [f.name, f.text, f.mode]));
-  // CRC-32 of "123456789" is the well-known check value 0xCBF43926.
   assert.equal(at(readZip(join(zipParts([{ name: 'c', text: '123456789', mode: 0o644 }]))), 0).crc, 0xcbf43926);
 });

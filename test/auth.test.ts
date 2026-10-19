@@ -9,7 +9,6 @@ import { startServer } from '../src/server.js';
 import type { RunningServer, ServerOptions } from '../src/server.js';
 import { header } from './support.js';
 
-// fetch doesn't allow overriding Host; node:http does.
 interface RawResponse {
   status: number | undefined;
   headers: IncomingHttpHeaders;
@@ -46,7 +45,7 @@ const login = async (srv: RunningServer, origin: string) => {
 
 test('happy path: /auth exchanges the token for a session cookie and redirects to /', async () => {
   await withServer({}, async (srv, origin) => {
-    assert.match(srv.url, /^http:\/\/127\.0\.0\.1:\d+\/auth\?t=[\w-]{43}$/); // 32 bytes in base64url
+    assert.match(srv.url, /^http:\/\/127\.0\.0\.1:\d+\/auth\?t=[\w-]{43}$/);
     const { res, cookie } = await login(srv, origin);
     assert.equal(res.status, 303);
     assert.equal(res.headers.get('location'), '/');
@@ -82,7 +81,6 @@ test('reused or wrong token → 403 without details', async () => {
     assert.equal(wrong.headers.get('set-cookie'), null);
     assert.equal((await fetch(`${origin}/auth`, { redirect: 'manual' })).status, 403);
 
-    // a wrong token doesn't consume the real one
     const first = await login(srv, origin);
     assert.equal(first.res.status, 303);
 
@@ -113,7 +111,6 @@ test('invalid Host → 421 (DNS rebinding), including on /auth and the API', asy
     const auth = await raw(srv.port, { path: `/auth?t=${srv.token}`, headers: { Host: 'evil.example' } });
     assert.equal(auth.status, 421);
     assert.equal(auth.headers['set-cookie'], undefined);
-    // the token was not consumed by the attempt with an invalid Host
     const { res, cookie } = await login(srv, origin);
     assert.equal(res.status, 303);
     const bad = await raw(srv.port, { path: '/api/status', headers: { Host: 'evil.example', Cookie: cookie } });
@@ -149,7 +146,6 @@ test('missing or wrong cookie → 401', async () => {
     assert.equal((await fetch(`${origin}/api/status`, { headers: { Cookie: `${name}=${'a'.repeat(43)}` } })).status, 401);
     assert.equal((await fetch(`${origin}/api/status`, { headers: { Cookie: `${name}=short` } })).status, 401);
     assert.equal((await fetch(`${origin}/api/status`, { headers: { Cookie: `outro=${cookie.split('=')[1]}` } })).status, 401);
-    // the bootstrap token is not valid as an API credential
     assert.equal((await fetch(`${origin}/api/status`, { headers: { Cookie: `${name}=${srv.token}` } })).status, 401);
     assert.equal((await fetch(`${origin}/api/status`, { headers: { Cookie: cookie } })).status, 200);
   });
@@ -163,16 +159,14 @@ test('locking the vault keeps the session but requires the password again', asyn
     assert.equal((await fetch(`${origin}/api/lock`, { method: 'POST', headers: h, body: '{}' })).status, 200);
     assert.equal((await fetch(`${origin}/api/status`, { headers: { Cookie: cookie } })).status, 200);
     assert.equal((await fetch(`${origin}/api/items`, { headers: { Cookie: cookie } })).status, 423);
-    // and the token cannot be reused to open another session
     assert.equal((await fetch(`${origin}/auth?t=${srv.token}`, { redirect: 'manual' })).status, 403);
   });
 });
 
 test('listens only on 127.0.0.1', async () => {
   await withServer({}, async (srv) => {
-    // connects through the IPv4 loopback interface; the bind is explicit on 127.0.0.1
     const r = await raw(srv.port, { path: '/' });
-    assert.equal(r.status, 401); // connects (bind ok), but without a session it gets nothing
+    assert.equal(r.status, 401);
   });
   assert.throws(() => startServer({ host: '0.0.0.0' }), { message: /only listens on 127\.0\.0\.1/ });
   assert.throws(() => startServer({ host: '::' }), { message: /only listens on 127\.0\.0\.1/ });

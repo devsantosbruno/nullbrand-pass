@@ -23,17 +23,13 @@ test('local API: session, Host/Origin, full flow', async () => {
     });
 
   try {
-    // Static page with CSP
     assert.equal((await fetch(base + '/')).status, 401, 'static files also require a session');
     const page = await call('GET', '/');
     assert.equal(page.status, 200);
     assert.match(header(page, 'content-security-policy'), /default-src 'none'/);
 
-    // No cookie → 401
     assert.equal((await fetch(base + '/api/status')).status, 401);
-    // Foreign origin → 403
     assert.equal((await call('GET', '/api/status', null, { Origin: 'http://evil.example' })).status, 403);
-    // Path traversal → 404
     assert.equal((await call('GET', '/../package.json')).status, 404);
 
     let s = await jsonRecord(await call('GET', '/api/status'));
@@ -66,7 +62,6 @@ test('local API: session, Host/Origin, full flow', async () => {
     assert.equal((await call('POST', '/api/items/bulk', { action: 'delete', ids: [temp['id']] })).status, 200);
     assert.equal((await jsonRecords(await call('GET', '/api/items'))).length, bulkIds.length);
 
-    // Folders: empty ones persist, rename, merge and delete
     const folderJson = async (method: string, path: string, body?: unknown) => {
       const answer: unknown = await (await call(method, path, body)).json();
       return answer;
@@ -92,7 +87,6 @@ test('local API: session, Host/Origin, full flow', async () => {
     const backupText = await backup.text();
     assert.ok(!backupText.includes('bank-password-123'));
 
-    // Locking keeps the session but the vault needs the password again (423)
     await call('POST', '/api/lock');
     assert.equal((await call('GET', '/api/items')).status, 423);
     await srv.close();
@@ -109,7 +103,6 @@ test('local API: session, Host/Origin, full flow', async () => {
     s = await jsonRecord(await call('GET', '/api/status'));
     assert.equal(s['count'], 2);
 
-    // Deleting the vault requires the master password
     assert.equal((await call('POST', '/api/destroy', { password: 'wrong-wrong' })).status, 401);
     assert.equal((await call('POST', '/api/destroy', { password: 'strong-master-password' })).status, 200);
     assert.equal((await call('GET', '/api/status')).status, 401, 'deleting also ends the session');
@@ -141,7 +134,6 @@ test('clipboard API: requires an unlocked vault, copies via the server and clear
   const call = (path: string, body?: unknown) => fetch(base + path, { method: 'POST', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
   try {
     await call('/api/setup', { password: 'strong-master-password' });
-    // no session: 401
     assert.equal((await fetch(base + '/api/clipboard/copy', { method: 'POST', headers: { Origin: base }, body: '{}' })).status, 401);
     assert.equal((await call('/api/clipboard/copy', { text: '' })).status, 400);
 
@@ -150,7 +142,6 @@ test('clipboard API: requires an unlocked vault, copies via the server and clear
     assert.deepEqual(copied, { ok: true, seconds: 30 });
     assert.equal(content, 'secret');
 
-    // non-sensitive: copies without a timer
     const plain: unknown = await (await call('/api/clipboard/copy', { text: 'user', sensitive: false })).json();
     assert.deepEqual(plain, { ok: true, seconds: 0 });
     assert.equal(clipboard.pending, false);
@@ -187,7 +178,6 @@ test('static: every module the build ships (subfolders too) is served as JavaScr
       assert.equal(header(res, 'x-content-type-options'), 'nosniff', file);
       assert.equal(header(res, 'cache-control'), 'no-cache', file);
     }
-    // The page loads exactly one script, and it is a same-origin module (no inline code, no other origin).
     const html = await (await fetch(`${base}/`, { headers: { Cookie: cookie, Origin: base } })).text();
     assert.deepEqual([...html.matchAll(/<script\b[^>]*>/g)].map((m) => at(m, 0)), ['<script type="module" src="/app.js">']);
     assert.doesNotMatch(html, /<style\b|\sstyle="|\son[a-z]+="/i, 'no inline style or inline event handler in index.html');

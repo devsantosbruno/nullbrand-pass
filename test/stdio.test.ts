@@ -1,4 +1,3 @@
-// Spec 09: EPIPE on stdout / stderr ends the process quietly; any other write error is reported and fails the run.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -10,8 +9,6 @@ import type { ErrorSource } from '../src/stdio.js';
 
 const BIN = new URL('../bin/nullbrand.js', import.meta.url).pathname;
 
-// Runs `nullbrand <args>` with `redirect` applied in sh, its output going to `true`, which exits at once without reading: by the
-// time node has started the read end is closed, so the first write gets EPIPE. The exit code of the producer is saved to a file.
 function pipeClosed(args: string, redirect: string) {
   const home = mkdtempSync(join(tmpdir(), 'nb-epipe-'));
   const codeFile = join(home, 'code');
@@ -30,13 +27,11 @@ test('stdout closed by the reader: exit 0, no stack trace', () => {
 });
 
 test('stderr closed by the reader: exit 0, no stack trace', () => {
-  // An unknown flag is warned about on stderr, then help succeeds on stdout (sent to /dev/null).
   const r = pipeClosed('--no-such-flag help', '2>&1 >/dev/null');
   assert.equal(r.code, '0');
   assert.equal(r.shell.stderr, '');
 });
 
-// process.exit() never returns; the fake stops the listener the same way.
 class Exited extends Error {}
 
 function fakeStream() {

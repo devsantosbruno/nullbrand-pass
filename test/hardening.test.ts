@@ -1,5 +1,3 @@
-// Threat: another (non-root) user on the same computer. Permissions, argv/env of subprocesses
-// and rejection of everything without a session.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
@@ -24,7 +22,6 @@ const skip = posix ? false : 'POSIX permissions do not apply to Windows';
 const mode = async (p: string) => (await stat(p)).mode & 0o777;
 const SECRET = 'S3cr3t-ultra-9f2c';
 
-// ---------- creation modes ----------
 
 test('directory 0700 and files 0600 at creation, even with umask 000', { skip }, async () => {
   const old = process.umask(0o000);
@@ -41,7 +38,6 @@ test('directory 0700 and files 0600 at creation, even with umask 000', { skip },
     await v.exportBackup(exp);
     assert.equal(await mode(exp), 0o600);
     assert.equal(await mode(join(base, 'fresh')), 0o700);
-    // nothing is left behind (temporary files) nor created outside the vault directory
     assert.deepEqual((await readdir(dir)).filter((n) => n.endsWith('.tmp')), []);
   } finally {
     process.umask(old);
@@ -60,7 +56,6 @@ test('no module uses the system temp directory, a shell or env with secrets', ()
   assert.doesNotMatch(cli, /flags\.(password|token|secret)/, 'the CLI does not accept secrets via flags');
 });
 
-// ---------- fix on startup ----------
 
 test('open permissions are fixed on startup, with a warning', { skip }, async () => {
   const base = await mkdtemp(join(tmpdir(), 'nb-fix-'));
@@ -102,7 +97,6 @@ test('an open data directory is fixed even before a vault exists; a foreign dire
 });
 
 test('refuses a directory or vault owned by another user', { skip }, async () => {
-  // getuid() is absent on Windows only, where this test is skipped.
   if (process.getuid === undefined) assert.fail('process.getuid is not available on this platform');
   const base = await mkdtemp(join(tmpdir(), 'nb-own-'));
   try {
@@ -116,12 +110,9 @@ test('refuses a directory or vault owned by another user', { skip }, async () =>
   }
 });
 
-// ---------- subprocesses: no secrets in argv/env ----------
 
-// A child process that records what was written to its stdin and "exits" with code 0 once stdin is ended.
 class FakeStdin implements ChildWritable {
   constructor(private readonly onEnd: (chunk: string | Uint8Array | undefined) => void) {}
-  // The code registers an 'error' listener; this fake never fails a write, so there is nothing to keep.
   on(_event: 'error', _listener: (err: Error) => void): this {
     return this;
   }
@@ -205,7 +196,6 @@ test('browser: only the URL (single-use token) goes in argv, with no shell and n
   }
 });
 
-// ---------- every route requires a session ----------
 
 interface RawResponse {
   status: number | undefined;
@@ -231,12 +221,9 @@ test('without a session, ALL routes (API, static and unknown) answer 401 with no
   const dir = await mkdtemp(join(tmpdir(), 'nb-routes-'));
   const srv = await startServer({ vaultPath: join(dir, 'vault.json') });
   try {
-    // Reads the routes from server.js itself: a new route enters the test automatically. (Compiled output indents deeper than the old
-    // source did, hence `\s+` instead of exactly four spaces.)
     const source = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
     const keys = [...source.matchAll(/^\s+'((?:GET|POST|PUT|PATCH|DELETE) \/api\/[^']*)'/gm)].map((m) => at(m, 1));
     assert.ok(keys.length >= 20, `routes found: ${keys.length}`);
-    // Every file the build ships to the browser (modules in subfolders included) plus a few that do not exist: all behind the same wall.
     const shipped = (await walkFiles(fileURLToPath(new URL('../public/', import.meta.url)))).filter((f) => !f.endsWith('.d.ts')).map((f) => `/${f}`);
     assert.ok(shipped.includes('/app.js') && shipped.includes('/styles.css'), `shipped files: ${shipped.join(', ')}`);
     const statics = ['/', ...shipped, '/api', '/anything', '/api/does-not-exist'];
@@ -253,7 +240,6 @@ test('without a session, ALL routes (API, static and unknown) answer 401 with no
         assert.doesNotMatch(r.body, /<html|vault|exists|unlocked/i);
       }
     }
-    // the token in the query of any route is not valid; only /auth exchanges it
     assert.equal((await rawReq(srv.port, { path: `/api/status?t=${srv.token}` })).status, 401);
     assert.equal((await rawReq(srv.port, { path: '/auth' })).status, 403);
   } finally {

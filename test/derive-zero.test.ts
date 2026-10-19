@@ -1,4 +1,3 @@
-// Security: the UTF-8 copy of the master password made by deriveKey() is zeroed also when scrypt() throws synchronously.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deriveKey } from '../src/crypto.js';
@@ -6,9 +5,8 @@ import type { KdfParams } from '../src/crypto.js';
 import { toMasterPassword } from '../src/brands.js';
 
 const SALT = Buffer.alloc(16, 7).toString('base64');
-const PASSWORD = 'zeroing-test-password-31-bytes'; // 30 ASCII bytes: a length no other Buffer.fill(0) in the call uses
+const PASSWORD = 'zeroing-test-password-31-bytes';
 
-// Runs fn while recording the length of every Buffer zeroed with fill(0).
 async function zeroedLengths(fn: () => Promise<unknown>): Promise<{ lengths: number[]; outcome: unknown }> {
   const lengths: number[] = [];
   const original = Buffer.prototype.fill;
@@ -28,8 +26,6 @@ async function zeroedLengths(fn: () => Promise<unknown>): Promise<{ lengths: num
 }
 
 test('the password copy is zeroed when scrypt() throws synchronously, and the promise rejects with that error', async () => {
-  // validateKdf reads N once and sees a valid power of two; the later read for scrypt() sees one that is not, so scrypt() throws
-  // before it starts (ERR_CRYPTO_INVALID_SCRYPT_PARAMS) and its callback never runs.
   let reads = 0;
   const kdf: KdfParams = {
     name: 'scrypt',

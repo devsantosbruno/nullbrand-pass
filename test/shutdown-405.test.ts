@@ -1,4 +1,3 @@
-// Spec 11: POST /api/shutdown never leaves an unhandled rejection, and a 405 is answered even when the request carries a body.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -71,7 +70,6 @@ test('405: a PATCH with a 10 kB body always gets the 405 (never ECONNRESET), on 
   });
 });
 
-// Spec 11 C: route × vault state → status (the UI keys on `key` and on 423, never on a 400 for these).
 test('status codes: a locked vault is 423 on every folder route, a missing item is 404 on GET/PUT/DELETE, bad folder input stays 400', async () => {
   await withServer(() => {}, async (origin, cookie) => {
     const call = (method: string, path: string, body: object = {}) =>
@@ -83,7 +81,6 @@ test('status codes: a locked vault is 423 on every folder route, a missing item 
     };
     assert.equal((await call('POST', '/api/setup', { password: 'strong-master-password' })).status, 200);
 
-    // unlocked
     assert.equal(await status('GET', '/api/items/nope'), 404);
     assert.equal(await status('PUT', '/api/items/nope', { name: 'x' }), 404);
     assert.equal(await status('DELETE', '/api/items/nope'), 404);
@@ -92,7 +89,6 @@ test('status codes: a locked vault is 423 on every folder route, a missing item 
     assert.equal(await status('POST', '/api/folders/delete', { name: 'ghost' }), 400);
     assert.equal(await status('POST', '/api/folders', { name: 'work' }), 200);
 
-    // locked
     assert.equal(await status('POST', '/api/lock'), 200);
     assert.equal(await status('POST', '/api/folders', { name: 'work' }), 423);
     assert.equal(await status('PUT', '/api/folders', { from: 'work', to: 'job' }), 423);

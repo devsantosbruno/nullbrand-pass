@@ -66,7 +66,7 @@ test('config.json: not created by reading; saving keeps other fields; broken fil
   const home = await mkdtemp(join(tmpdir(), 'nb-cfg-'));
   try {
     assert.deepEqual(readConfig(home), {});
-    resolveForProcess({ home, env: {}, system: 'pt-BR' }); // auto-detected language is never written
+    resolveForProcess({ home, env: {}, system: 'pt-BR' });
     await assert.rejects(stat(configPath(home)), { code: 'ENOENT' }, 'no file after a plain resolution');
 
     await writeFile(configPath(home), JSON.stringify({ theme: 'dark', lang: 'en', nested: { a: 1 } }));

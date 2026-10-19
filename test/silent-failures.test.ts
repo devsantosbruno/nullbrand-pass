@@ -1,4 +1,3 @@
-// Failures that used to be swallowed or mislabelled: each case pins the honest behaviour.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCipheriv, randomBytes } from 'node:crypto';
@@ -64,7 +63,6 @@ test('macOS: a sensitive copy that falls back to pbcopy says it was not conceale
 
   const good = createClipboard({ backend: macBackend(async () => ''), ttlMs: 0 });
   assert.equal((await good.copy('secret')).concealed, true);
-  // Other backends have no fallback: they never report a degraded copy.
   const plain: Backend = { name: 'plain', write: async () => '', read: async () => '', clear: async () => '' };
   assert.equal((await createClipboard({ backend: plain, ttlMs: 0 }).copy('secret')).concealed, true);
 });
@@ -118,7 +116,6 @@ test('a malformed percent-escape in the URL is a 400 with an i18n key', async ()
 test('an unexpected failure is a logged 500 that does not leak the message', async (t) => {
   const logged: string[] = [];
   t.mock.method(console, 'error', (...args: unknown[]) => void logged.push(args.map(String).join(' ')));
-  // The vault "directory" is a regular file, so creating the vault fails with a system error that has no i18n key.
   await withServer(async (call, dir) => {
     await writeFile(join(dir, 'blocker'), 'x');
     const r = await call('POST', '/api/setup', JSON.stringify({ password: 'strong-master-password' }));

@@ -1,5 +1,3 @@
-// The browser code looks elements up by id and the HTML is its own. There is no DOM in the test runner, so this checks the contract
-// from both sides: every `#id` the code asks for is in index.html, and every data-i18n key the HTML uses is in both dictionaries.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -14,7 +12,6 @@ test('every #id the web code looks up exists in index.html', async () => {
   const lookups = new Set<string>();
   for (const file of (await walkFiles(publicDir)).filter((f) => f.endsWith('.js'))) {
     const code = readFileSync(`${publicDir}${file}`, 'utf8');
-    // $('#x'), $input('#x'), $button('#x'), $dialog('#x'), $form('#x'), $textarea('#x'), query(document, '#x', ...), '#x' in a selector list
     for (const m of code.matchAll(/(?:\$\w*\(|query\(document, )'#([\w-]+)'/g)) lookups.add(at(m, 1));
   }
   assert.ok(lookups.size > 80, `lookups found: ${lookups.size}`);

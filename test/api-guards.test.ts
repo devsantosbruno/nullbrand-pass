@@ -1,7 +1,3 @@
-// Unit tests of the runtime guards the web UI puts in front of every answer of the local API (src/shared/api-guards.ts).
-// Rules under test: a guard hands back the SAME value (typed) or a `reason`; the reason is built from field names and expected types
-// only, NEVER from values of the response (they can be passwords and the reason goes to the console). Every wrong value below carries
-// a SENTINEL, and so do the neighbouring valid fields, so a reason that echoed anything would be caught.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -34,7 +30,6 @@ import { at, readDictFile } from './support.js';
 const SENTINEL = 'SENTINEL-s3cr3t-value';
 const LEAK = /SENTINEL|424242/;
 
-// The guard must refuse `value`; returns the reason after checking that it leaks nothing.
 function refused(guard: Guard<unknown>, value: unknown, label: string): string {
   const result = guard(value);
   if (result.ok) assert.fail(`${label}: the guard accepted a value it must refuse`);
@@ -43,7 +38,6 @@ function refused(guard: Guard<unknown>, value: unknown, label: string): string {
   return result.reason;
 }
 
-// The guard must accept `value` and hand back the very same object.
 function accepted<T>(guard: Guard<T>, value: unknown, label: string): T {
   const result = guard(value);
   if (!result.ok) assert.fail(`${label}: refused (${result.reason})`);
@@ -51,11 +45,9 @@ function accepted<T>(guard: Guard<T>, value: unknown, label: string): T {
   return result.value;
 }
 
-// Values of the wrong type for any field, each one carrying a sentinel.
 const WRONG_VALUES: readonly unknown[] = [SENTINEL, 424242, { leak: SENTINEL }, [SENTINEL], false, null];
 const NOT_OBJECTS: readonly unknown[] = [null, undefined, SENTINEL, 424242, true, [], [SENTINEL]];
 
-// ---------- the simple answers, table-driven ----------
 interface Case {
   name: string;
   guard: Guard<unknown>;
@@ -98,7 +90,7 @@ for (const { name, guard, valid } of CASES) {
       let refusedOne = false;
       for (const bad of WRONG_VALUES) {
         const answer = { ...valid, [key]: bad };
-        if (guard(answer).ok) continue; // this particular wrong value is legitimate for the field (e.g. null for a nullable one)
+        if (guard(answer).ok) continue;
         refusedOne = true;
         assert.match(refused(guard, answer, `"${key}" = ${typeof bad}`), new RegExp(`\\.${key}\\b`), `a wrong "${key}" must name the field`);
       }
@@ -139,12 +131,10 @@ test('guardSshKeyResponse: `algo` is one of the two algorithms; `comment` is opt
 });
 
 test('guardGenerateResponse: `bits: null` is NOT accepted', async () => {
-  // The server no longer produces it (entropyBits() shares effectiveLength() with generatePassword(), spec 07); the guard stays strict.
   assert.match(refused(guardGenerateResponse, { password: 'x', bits: null }, 'bits null'), /\.bits\b/);
   refused(guardGenerateResponse, { password: 'x', bits: 'NaN' }, 'bits as text');
 });
 
-// ---------- error answers ----------
 test('isApiErrorResponse: a string `error`, an optional string `key`, optional flat `params`', () => {
   assert.ok(isApiErrorResponse({ error: 'Vault locked.' }));
   assert.ok(isApiErrorResponse({ error: 'x', key: 'err.http.locked' }));
@@ -159,8 +149,6 @@ test('isApiErrorResponse: a string `error`, an optional string `key`, optional f
   assert.ok(!isApiErrorResponse({ error: 'x', params: { nested: { a: 1 } } }));
 });
 
-// ---------- vault items ----------
-// One item of each type with every field of its type filled in, built the way the server builds them.
 function fullItems(): VaultItem[] {
   return [
     normalizeItem({ type: 'login', name: 'Bank', username: 'me', password: 'login-pw', uris: ['https://a', 'https://b'], totp: 'JBSWY3DP', notes: 'n', folder: 'F', favorite: true }),
@@ -170,7 +158,6 @@ function fullItems(): VaultItem[] {
     normalizeItem({ type: 'ssh', name: 'Server', sshAlgo: 'ed25519', sshPublicKey: 'ssh-ed25519 AAAA', sshFingerprint: 'SHA256:x', sshPrivateKey: 'PRIVATE', sshHost: 'h', sshUser: 'u', sshPort: '22' }),
   ];
 }
-// What GET /api/items shows for an item: the three secrets are replaced by "has one" flags.
 function publicForm(item: VaultItem): Record<string, unknown> {
   const { password, totp, sshPrivateKey, ...rest } = item;
   return { ...rest, hasPassword: password !== '', hasTotp: totp !== '', hasSshKey: sshPrivateKey !== '' };
@@ -182,12 +169,11 @@ test('guardVaultItem: every type is accepted and the SAME object comes back, ext
     const withExtra = { ...item, futureField: { nested: [1, 2] } };
     const result: Readonly<Record<string, unknown>> = accepted(guardVaultItem, withExtra, `${item.type} with extra field`);
     assert.deepEqual(result['futureField'], { nested: [1, 2] }, 'the extra property is still there');
-    accepted(guardVaultItem, { ...item, createdAt: '' }, `${item.type} with an empty createdAt`); // legacy vaults have no createdAt
+    accepted(guardVaultItem, { ...item, createdAt: '' }, `${item.type} with an empty createdAt`);
   }
 });
 
 test('guardVaultItem: refuses malformed items and the reason names the field without echoing any value', () => {
-  // Every string field of a login holds a sentinel, so a reason that quoted a neighbour would be caught.
   const login: Record<string, unknown> = { ...normalizeItem({ type: 'login', name: SENTINEL, username: SENTINEL, password: SENTINEL, totp: SENTINEL, notes: SENTINEL, folder: SENTINEL, uris: [SENTINEL] }) };
   accepted(guardVaultItem, login, 'sentinel login (valid)');
   for (const key of Object.keys(login)) {
@@ -242,7 +228,6 @@ test('guardPublicItems: the same entries come back in a new array; a bad entry i
   assert.match(refused(guardPublicItems, [...list, null], 'null entry'), /^items\[5\]: expected object$/);
 });
 
-// ---------- folders ----------
 test('guardFolderList: returns a COPY (the UI edits its own list) and refuses anything that is not an array of strings', () => {
   const answer = ['Work', 'Personal'];
   const result = guardFolderList(answer);
@@ -255,14 +240,12 @@ test('guardFolderList: returns a COPY (the UI edits its own list) and refuses an
   for (const bad of [null, undefined, SENTINEL, 424242, {}, [SENTINEL, 424242], [null], [['x']]]) assert.equal(refused(guardFolderList, bad, `folders = ${JSON.stringify(bad)}`), 'folders: expected array of strings');
 });
 
-// ---------- shutdown ----------
 test('guardShutdownAck: `{ ok: true }` becomes `undefined` (the route is typed as having no body); anything else is refused', () => {
   assert.deepEqual(guardShutdownAck({ ok: true }), { ok: true, value: undefined });
   assert.deepEqual(guardShutdownAck({ ok: true, futureField: SENTINEL }), { ok: true, value: undefined });
   for (const bad of [{}, { ok: false }, { ok: 'true' }, { ok: SENTINEL }, null, undefined, 'ok', [], [true]]) assert.match(refused(guardShutdownAck, bad, JSON.stringify(bad)), /expected (object|true)/);
 });
 
-// ---------- translation dictionaries ----------
 test('guardDict: an object of strings is accepted as is; an array, a non-object or a non-string entry is refused naming the KEY only', () => {
   const dict = { 'a.hello': 'Hello', 'a.bye': 'Bye' };
   assert.equal(accepted(guardDict, dict, 'dictionary'), dict);

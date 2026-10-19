@@ -1,4 +1,3 @@
-// Spec 08: command lookup ignores the Object prototype, and parseArgs reports what it used to swallow.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -51,7 +50,6 @@ test('parseArgs: a value that starts with -- counts as missing and is not swallo
   const r = cli(['ui', '--port', '--idle', '0']);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /--port expects a value\./);
-  // `--idle` was not consumed as the value of --port, so only --port is reported
   assert.doesNotMatch(r.stderr, /--idle expects/);
 });
 

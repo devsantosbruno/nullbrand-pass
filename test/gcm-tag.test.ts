@@ -1,5 +1,3 @@
-// Security: AES-GCM authentication tags must be exactly 16 bytes. Node 22.14 accepts a truncated tag (4 or 8 bytes with the right
-// prefix) unless `authTagLength` is given, which would cut the integrity check down to 32 bits.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -17,8 +15,6 @@ const FIX = new URL('./fixtures/', import.meta.url);
 const FIX_PW = 'fixture-master-password-ñ-123';
 const BAD_LENGTHS = [0, 4, 8, 12, 15, 17];
 
-// Writes a v2 vault holding one item and returns its text plus a copy whose payload tag is `tagBytes` long: the first bytes of the
-// genuine tag (so a truncated tag has the CORRECT prefix, the exact case Node accepts without authTagLength), padded with zeros if longer.
 async function vaultTextWithTag(dir: string, tagBytes: number): Promise<string> {
   const path = join(dir, `vault-${tagBytes}.json`);
   await writeV2Vault(path, PW, { items: [{ id: '1', name: 'one' }], folders: [] });
@@ -70,8 +66,6 @@ test('a vault file with a tag that is not 16 bytes is refused when read (before 
     await writeFile(path, text);
     await assert.rejects(readVaultFile(path), (err: unknown) => thrownKey(err) === 'err.vault.corrupted', `file ${n} bytes`);
     await assert.rejects(Vault.unlock(PW, path, { migrate: false }), (err: unknown) => thrownKey(err) === 'err.vault.corrupted', `unlock ${n} bytes`);
-    // Backup path. An EMPTY password would reject with err.emptyPassword if deriveKey ran first, so this also proves the check
-    // happens before the key derivation.
     await assert.rejects(readBackupItemsFromText(text, ''), (err: unknown) => thrownKey(err) === 'err.vault.corrupted', `backup ${n} bytes`);
     await assert.rejects(readBackupItemsFromText(text, PW), (err: unknown) => thrownKey(err) === 'err.vault.corrupted', `backup+pw ${n} bytes`);
   }

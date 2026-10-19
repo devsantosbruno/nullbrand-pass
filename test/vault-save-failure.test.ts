@@ -1,4 +1,3 @@
-// Spec 10: when save() rejects, the in-memory vault goes back to exactly what it was and the original error comes out unchanged.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -11,7 +10,6 @@ import { at } from './support.js';
 const PW = 'test-master-password';
 const sha = async (path: string): Promise<string> => createHash('sha256').update(await fs.readFile(path)).digest('hex');
 
-// A saved vault with two folders, one empty, and three items (two in "work").
 async function setup() {
   const dir = await fs.mkdtemp(join(tmpdir(), 'nb-savefail-'));
   const path = join(dir, 'vault.json');
@@ -76,7 +74,6 @@ test('validation errors thrown before any change are untouched by the helper', a
 });
 
 test('a real write failure (read-only directory): remove keeps the item and the file is unchanged', async (t) => {
-  // Needs a non-root POSIX user (root ignores directory permissions): elsewhere the injected-failure tests above cover it.
   if (process.platform === 'win32' || process.getuid?.() === 0) {
     t.skip('needs a non-root POSIX user');
     return;
@@ -94,7 +91,6 @@ test('a real write failure (read-only directory): remove keeps the item and the 
     await fs.chmod(dir, 0o700);
   }
   assert.equal(await sha(path), diskBefore);
-  // After the failure goes away, a normal save works and persists the item set that the user last saw.
   await vault.remove(id);
   const reopened = await Vault.unlock(PW, path, { migrate: false });
   assert.equal(reopened.items.length, count - 1);

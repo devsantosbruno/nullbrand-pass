@@ -1,4 +1,3 @@
-// Stage 4: what the typed vault guarantees. Every case runs against a temporary directory.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
@@ -20,7 +19,6 @@ const PW = 'test-master-password';
 const tmp = () => fs.mkdtemp(join(tmpdir(), 'nb-strict-'));
 const FIX = new URL('./fixtures/', import.meta.url);
 const FIX_PW = 'fixture-master-password-ñ-123';
-// What a rejection looked like: its i18n key, its params and its message (the tests assert on these).
 interface Failure {
   key: string | undefined;
   params: Readonly<Record<string, unknown>>;
@@ -35,13 +33,10 @@ const fail = async (promise: Promise<unknown>): Promise<Failure> =>
     },
   );
 
-// Vault.unlock, readBackupItemsFromText and encryptJson are typed (`string`, `object`), but plain JavaScript can still hand them anything.
-// These views declare the parameters as `unknown`; method signatures are compared bivariantly, so no cast is needed to get there.
 const looseVault: { unlock(password: unknown, path: string): Promise<unknown> } = Vault;
 const looseBackup: { readBackupItemsFromText(text: string, password: unknown): Promise<unknown> } = vaultModule;
 const looseCrypto: { encryptJson(key: DerivedKey, value: unknown, aad: string): EncryptedBox } = cryptoModule;
 
-// A v2 vault whose encrypted payload is exactly `content`.
 async function vaultWith(dir: string, content: unknown) {
   const kdf: KdfParams = { name: 'scrypt', N: 2 ** 14, r: 8, p: 1, keyLen: 32, salt: Buffer.alloc(16, 7).toString('base64') };
   const aad = ['nullbrand-vault', 2, 'scrypt', kdf.N, kdf.r, kdf.p, 32, kdf.salt].join(':');
@@ -73,7 +68,7 @@ test('an empty or missing master password is a REJECTION with err.emptyPassword,
   const dir = await tmp();
   const path = await vaultWith(dir, { items: [] });
   for (const pw of ['', undefined, null, 5]) {
-    const promise = looseVault.unlock(pw, path); // must not throw here
+    const promise = looseVault.unlock(pw, path);
     assert.ok(promise instanceof Promise);
     const e = await fail(promise);
     assert.equal(e.key, 'err.emptyPassword', String(pw));
@@ -97,7 +92,6 @@ test('add/merge with a truthy non-string id or createdAt is rejected with a type
   assert.equal((await fail(Promise.resolve().then(() => normalizeItem({ name: 'x', id: 5 })))).params['field'], 'id');
   assert.deepEqual(await fs.readFile(path), before, 'the vault file was not touched');
   assert.equal(v.items.length, 0);
-  // falsy values still mean "not given", as before
   const item = await v.add({ name: 'ok', createdAt: '', id: 0 });
   assert.match(item.createdAt, /^\d{4}-/);
   assert.notEqual(item.id, 0);
@@ -168,7 +162,7 @@ test('merge is all-or-nothing: an invalid item in the middle leaves memory and f
   assert.equal(e.key, 'err.vault.invalidField');
   assert.deepEqual(v.items, itemsBefore, 'this.items is exactly what it was');
   assert.deepEqual(await fs.readFile(path), fileBefore, 'the file did not change');
-  await v.add({ name: 'later' }); // some other action saves
+  await v.add({ name: 'later' });
   const names = v.items.map((i) => i.name);
   assert.deepEqual(names, ['existing', 'later']);
   v.key.fill(0);
@@ -198,14 +192,12 @@ test('add, update, renameFolder, moveMany: when normalizeItem throws, this.items
   const fileBefore = await fs.readFile(path);
   assert.equal((await fail(v.add({ name: 'x', createdAt: 5 }))).key, 'err.vault.invalidField');
   assert.equal(state(), before);
-  // update: a stored item with no createdAt (legacy) lets the given value through to the check
   at(v.items, 0).createdAt = '';
   const legacyState = state();
   assert.equal((await fail(v.update(a.id, { createdAt: 5 }))).key, 'err.vault.invalidField');
   assert.equal(state(), legacyState);
   at(v.items, 0).createdAt = a.createdAt;
-  // renameFolder / moveMany / deleteFolder feed stored items to normalizeItem; corrupt the SECOND one in memory so the map throws midway
-  assert.ok(Reflect.set(at(v.items, 1), 'createdAt', 5)); // not a string: only reachable by corrupting memory
+  assert.ok(Reflect.set(at(v.items, 1), 'createdAt', 5));
   const tampered = state();
   const originalFirst = at(v.items, 0);
   assert.equal((await fail(v.renameFolder('F', 'G'))).key, 'err.vault.invalidItem');

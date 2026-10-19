@@ -5,7 +5,6 @@ import type { Backend, ExitHookProcess, RunOptions } from '../src/clipboard.js';
 import { EventEmitter } from 'node:events';
 import type { TestContext } from 'node:test';
 
-// In-memory backend: the "clipboard" is a string; `calls` records what was done.
 type FakeCall = ['write', { sensitive?: boolean } | undefined] | ['read'] | ['clear'];
 interface FakeBackend extends Backend {
   content: string;
@@ -58,7 +57,7 @@ test('does not clear if the user copied something else afterwards', async (t) =>
   const b = fakeBackend();
   const clip = createClipboard({ backend: b, ttlMs: 1000 });
   const r = await clip.copy('s3cret!');
-  b.content = 'something else'; // copy made outside nullbrand
+  b.content = 'something else';
   t.mock.timers.tick(1000);
   assert.equal(await r.done, 'changed');
   assert.equal(b.content, 'something else');
@@ -108,7 +107,7 @@ test('a new copy cancels the previous timer and restarts the countdown', async (
   t.mock.timers.tick(8000);
   const second = await clip.copy('second');
   assert.equal(await first.done, 'replaced');
-  t.mock.timers.tick(8000); // 16 s since the first, 8 s since the second
+  t.mock.timers.tick(8000);
   await clip.idle();
   assert.equal(b.content, 'second', 'the old timer must not clear the new copy');
   t.mock.timers.tick(2000);
@@ -195,7 +194,6 @@ test('the text goes to the backend marked as sensitive by default', async () => 
   assert.deepEqual(b.calls.flatMap((c) => (c[0] === 'write' ? [c[1]?.sensitive] : [])), [true, false]);
 });
 
-// A stand-in for `process`: an EventEmitter that also has exit(). The hooks are given their own `exit` function, so this one must never run.
 class FakeProcess extends EventEmitter implements ExitHookProcess {
   exit(): never {
     throw new Error('process.exit must not be called');

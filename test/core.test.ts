@@ -95,7 +95,6 @@ test('entropyBits describes the password that generatePassword builds', () => {
     assert.equal(generatePassword({ length: odd }).length, 20);
   }
   assert.equal(entropyBits({ length: '16' }), entropyBits({ length: 16 }));
-  // Every valid length keeps the old formula: round(length * log2(alphabet size)).
   const sets: [Record<string, boolean>, number][] = [
     [{}, 26 + 26 + 10 + 25],
     [{ symbols: false }, 62],

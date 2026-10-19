@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { main } from '../src/cli.js';
 
-// `get` already copies to the clipboard by default (`--show` prints, `--clear` / `--no-clear` control the wipe). There is no `--copy`
-// flag, so neither the help text nor the locales may advertise one.
 test('help: does not mention a --copy flag', async () => {
   const lines: string[] = [];
   const original = console.log;

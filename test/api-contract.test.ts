@@ -1,9 +1,3 @@
-// CONTRACT TEST: the real server against the guards the web UI uses (src/shared/api-guards.ts).
-// It starts the server (startServer, temporary HOME/NULLBRAND_HOME, fake clipboard, port 0), walks EVERY route of ApiResponses locked
-// and unlocked, and checks that each success answer passes the guard of its route and each error answer passes isApiErrorResponse.
-// Three vaults: (a) the legacy fixture, (b) a vault whose items carry extra fields and an empty createdAt (the guards must not be
-// stricter than the server), (c) a vault created through the API. If a guard refuses a legitimate answer, this test fails: stop and look
-// at the guard before touching it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -45,8 +39,6 @@ const FIX_PW = 'fixture-master-password-ñ-123';
 const OWN_PW = 'strong-master-password';
 const CHANGED_PW = 'another-strong-password';
 
-// Every route key ("METHOD /path") of the compiled server, read from its own text: a route added later enters the test by itself
-// (and fails the coverage check at the end until it is walked here).
 const SERVER_ROUTES: readonly string[] = [...readFileSync(new URL('../src/server.js', import.meta.url), 'utf8').matchAll(/^\s+'((?:GET|POST|PUT|PATCH|DELETE) \/api\/[^']*)'/gm)].map((m) => m[1] ?? '');
 const covered = new Set<string>();
 
@@ -69,7 +61,6 @@ class Api {
     private readonly cookie: string,
   ) {}
 
-  // `route` is a key of ApiResponses ("GET /api/items/:id"); every key used is recorded for the coverage check.
   async call(route: string, { id, body, noCookie = false, origin }: CallOptions = {}): Promise<Reply> {
     const match = /^([A-Z]+) (\S+)$/.exec(route);
     if (match === null) assert.fail(`bad route key: ${route}`);
@@ -78,19 +69,17 @@ class Api {
     covered.add(route);
     const headers: Record<string, string> = { Origin: origin ?? this.base, 'Content-Type': 'application/json' };
     if (!noCookie) headers['Cookie'] = this.cookie;
-    // (a GET cannot carry a body; the server only reads one for POST / PUT / PATCH anyway)
     const res = await fetch(this.base + path, { method, headers, ...(body === undefined || method === 'GET' ? {} : { body: JSON.stringify(body) }) });
     const text = await res.text();
     let json: unknown;
     try {
       json = parseJson(text);
     } catch {
-      json = undefined; // not JSON (the backup export is JSON text, but a static file is not)
+      json = undefined;
     }
     return { status: res.status, text, json, contentDisposition: res.headers.get('content-disposition') };
   }
 
-  // 200 and the body passes the guard of the route; returns what the guard hands back.
   async ok<T>(route: string, guard: Guard<T>, options: CallOptions = {}): Promise<T> {
     const reply = await this.call(route, options);
     assert.equal(reply.status, 200, `${route}: status ${reply.status}`);
@@ -99,7 +88,6 @@ class Api {
     return verdict.value;
   }
 
-  // The expected error status and the body passes isApiErrorResponse.
   async error(route: string, status: number, options: CallOptions = {}): Promise<void> {
     const reply = await this.call(route, options);
     assert.equal(reply.status, status, `${route}: expected ${status}, got ${reply.status}`);
@@ -107,7 +95,6 @@ class Api {
   }
 }
 
-// The fake clipboard the server copies into (the real one is never touched).
 function fakeClipboard() {
   let content = '';
   const backend: Backend = {
@@ -141,7 +128,6 @@ async function withServer(
   }
 }
 
-// Items as an OLD vault stores them: no `type` on the first, extra fields everywhere, an empty createdAt.
 const EXTRA_FIELDS_ITEMS: readonly object[] = [
   { id: 'x1', name: 'Legacy login', username: 'u', password: 'pw-legacy', uris: ['https://a.example'], createdAt: '', updatedAt: '', futureField: { a: 1 }, other: 'SENTINEL' },
   { id: 'x2', type: 'note', name: 'Extra note', notes: 'text', createdAt: '', updatedAt: '', fancy: [1, 2, 3] },
@@ -158,14 +144,11 @@ const NEW_ITEMS: readonly object[] = [
   { type: 'ssh', name: 'C ssh', sshAlgo: 'ed25519', sshPublicKey: 'ssh-ed25519 AAAA', sshPrivateKey: 'PRIV', sshHost: 'h', sshUser: 'u', sshPort: '22' },
 ];
 
-// What every route does while the vault is locked or does not exist, then the walk of the unlocked routes.
 async function walk(api: Api, { password, existing, thorough, expectedItems }: { password: string; existing: boolean; thorough: boolean; expectedItems: number }): Promise<void> {
-  // ---- no session / bad origin / unknown route: error answers ----
   for (const route of SERVER_ROUTES) await api.error(route, 401, { noCookie: true, id: 'x', body: {} });
   await api.error('POST /api/generate', 403, { origin: 'http://evil.example', body: {} });
   await api.error('GET /api/nothing-here', 404);
 
-  // ---- locked (or no vault yet) ----
   const status = await api.ok('GET /api/status', guardStatusResponse);
   assert.deepEqual([status.exists, status.unlocked, status.count], [existing, false, null]);
   await api.ok('GET /api/config', guardConfigResponse);
@@ -185,7 +168,6 @@ async function walk(api: Api, { password, existing, thorough, expectedItems }: {
   ]) {
     await api.error(route, 423, { id: 'x', body: {} });
   }
-  // The three folder-writing routes check the vault before folderOp(), so a locked vault is 423 like everywhere else (spec 11, B-16).
   for (const route of ['POST /api/folders', 'PUT /api/folders', 'POST /api/folders/delete']) {
     const reply = await api.call(route, { body: {} });
     assert.equal(reply.status, 423, `${route} while locked`);
@@ -207,7 +189,6 @@ async function walk(api: Api, { password, existing, thorough, expectedItems }: {
     await api.ok('POST /api/setup', guardOkResponse, { body: { password } });
   }
 
-  // ---- unlocked: the items the vault came with ----
   const unlocked = await api.ok('GET /api/status', guardStatusResponse);
   assert.deepEqual([unlocked.exists, unlocked.unlocked, unlocked.count], [true, true, expectedItems]);
   const listed = await api.ok('GET /api/items', guardPublicItems);
@@ -219,11 +200,9 @@ async function walk(api: Api, { password, existing, thorough, expectedItems }: {
     assert.equal(full.name, entry.name);
   }
   await api.error('GET /api/items/:id', 404, { id: 'does-not-exist' });
-  // PUT / DELETE of an unknown id are 404 like GET (spec 11, B-17).
   await api.error('PUT /api/items/:id', 404, { id: 'does-not-exist', body: { name: 'x' } });
   await api.error('DELETE /api/items/:id', 404, { id: 'does-not-exist' });
 
-  // ---- items of every type: create, update, bulk, delete ----
   const created: string[] = [];
   for (const input of NEW_ITEMS) {
     const item = await api.ok('POST /api/items', guardVaultItem, { body: input });
@@ -236,7 +215,6 @@ async function walk(api: Api, { password, existing, thorough, expectedItems }: {
   assert.equal(new Set(afterCreate.map((i) => i.type)).size, 5, 'all five types are in the list');
   const [first = '', second = '', third = '', fourth = '', fifth = ''] = created;
 
-  // ---- folders ----
   assert.equal((await api.ok('POST /api/folders', guardFolderNameResponse, { body: { name: 'Contract' } })).name, 'Contract');
   await api.error('POST /api/folders', 400, { body: { name: '   ' } });
   assert.ok((await api.ok('GET /api/folders', guardFolderList)).includes('Contract'));
@@ -253,22 +231,17 @@ async function walk(api: Api, { password, existing, thorough, expectedItems }: {
   await api.ok('DELETE /api/items/:id', guardOkResponse, { id: fifth });
   await api.ok('GET /api/folders', guardFolderList);
 
-  // ---- clipboard (the fake one) ----
   assert.equal((await api.ok('POST /api/clipboard/copy', guardClipboardCopyResponse, { body: { text: 'secret', sensitive: true } })).seconds, 30);
   assert.equal((await api.ok('POST /api/clipboard/copy', guardClipboardCopyResponse, { body: { text: 'user', sensitive: false } })).seconds, 0);
   await api.error('POST /api/clipboard/copy', 400, { body: { text: '' } });
 
-  // ---- generator ----
   await api.ok('POST /api/generate', guardGenerateResponse, { body: { length: 8 } });
   await api.ok('POST /api/generate', guardGenerateResponse, { body: { length: 128, symbols: false } });
   await api.ok('POST /api/generate', guardGenerateResponse, { body: { length: '16' } });
-  // A length that is not a number: the password is generated with the default length and `bits` describes that password (spec 07; it used
-  // to be null because entropyBits() computed NaN), so the UI guard accepts the answer.
   const odd = await api.ok('POST /api/generate', guardGenerateResponse, { body: { length: 'abc' } });
   assert.equal(odd.password.length, 20);
   assert.equal(odd.bits, (await api.ok('POST /api/generate', guardGenerateResponse, { body: { length: 20 } })).bits);
 
-  // ---- imports and export ----
   const nested = JSON.stringify({ encrypted: false, folders: [], items: [{ type: 1, name: 'Imported', login: { username: 'a', password: 'b' } }, { type: 5, name: 'Unsupported' }] });
   const body = { text: nested, folder: 'Imported' };
   const preview = await api.ok('POST /api/import', guardImportAnswer, { body: { ...body, dryRun: true } });
@@ -282,7 +255,6 @@ async function walk(api: Api, { password, existing, thorough, expectedItems }: {
   await api.error('POST /api/import', 400, { body: { text: 'not json' } });
   await api.error('POST /api/import', 400, { body: { text: '{"items": "no"}' } });
 
-  // The unencrypted export asks for the master password again and an explicit confirmation.
   await api.error('POST /api/export', 400, { body: { password } });
   await api.error('POST /api/export', 401, { body: { password: 'wrong-wrong-wrong', confirm: true } });
   const plain = await api.ok('POST /api/export', guardExportResponse, { body: { password, confirm: true } });
@@ -300,7 +272,6 @@ async function walk(api: Api, { password, existing, thorough, expectedItems }: {
   await api.error('POST /api/import/backup', 401, { body: { text: backup.text, password: 'wrong-backup-password' } });
   await api.error('POST /api/import/backup', 400, { body: { text: 'not a backup', password } });
 
-  // ---- password change, lock, unlock, destroy ----
   if (thorough) await api.error('POST /api/password', 401, { body: { current: 'wrong-wrong-wrong', next: CHANGED_PW } });
   await api.ok('POST /api/password', guardOkResponse, { body: { current: password, next: CHANGED_PW } });
   await api.ok('POST /api/lock', guardOkResponse);
@@ -310,7 +281,7 @@ async function walk(api: Api, { password, existing, thorough, expectedItems }: {
   await api.ok('POST /api/unlock', guardOkResponse, { body: { password: CHANGED_PW } });
   assert.equal((await api.ok('GET /api/status', guardStatusResponse)).count, total);
   await api.ok('POST /api/destroy', guardOkResponse, { body: { password: CHANGED_PW } });
-  await api.error('GET /api/status', 401); // destroying the vault ends the session
+  await api.error('GET /api/status', 401);
 }
 
 test('contract (a): the legacy fixture vault — every route, every answer passes its guard', async () => {
@@ -324,7 +295,6 @@ test('contract (b): a vault with extra fields and an empty createdAt — the gua
   await withServer(
     async (_dir, vaultPath) => writeV2Vault(vaultPath, OWN_PW, { items: EXTRA_FIELDS_ITEMS, folders: ['Legacy'] }),
     async (api) => {
-      // Before the walk changes anything: the extra fields reach the guard and survive it (the guard hands back the same object).
       await api.ok('POST /api/unlock', guardOkResponse, { body: { password: OWN_PW } });
       const listed = await api.ok('GET /api/items', guardPublicItems);
       assert.equal(listed.length, EXTRA_FIELDS_ITEMS.length);

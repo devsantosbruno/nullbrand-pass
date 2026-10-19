@@ -1,4 +1,3 @@
-// Stage 5b: server, CLI entry and bin behaviours that the typed code makes explicit.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect } from 'node:net';
@@ -40,7 +39,7 @@ test('a JSON `null` body is "Invalid JSON" for the routes that read fields, and 
       const r = await call(method, path, 'null');
       if (path === '/api/generate-nothing') { assert.equal(r.status, 404); continue; }
       const body = await jsonRecord(r);
-      if (path === '/api/unlock') { assert.equal(r.status, 404); continue; } // no vault yet: refused before the body is read
+      if (path === '/api/unlock') { assert.equal(r.status, 404); continue; }
       assert.equal(r.status, 400, path);
       assert.equal(body['key'], 'err.http.invalidJson', path);
     }

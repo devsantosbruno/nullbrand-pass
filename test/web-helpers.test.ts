@@ -1,5 +1,3 @@
-// The DOM-free helpers of the web UI. The expected values are what the app produced before they were extracted (the three copies of
-// the scheme regex were merged into normalizeUrl), so a change in behavior shows up here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -20,12 +18,12 @@ test('url: normalizeUrl adds https:// only when there is no scheme', () => {
 test('url: hostOf / siteDomain keep the outputs the app had', () => {
   const cases: readonly (readonly [input: string, host: string, domain: string])[] = [
     ['example.com', 'example.com', 'example.com'],
-    ['www.example.com/x', 'example.com', 'www.example.com'], // hostOf drops "www.", siteDomain keeps the host as it is
-    ['http://a.b:8080/x', 'a.b', 'a.b:8080'], // siteDomain keeps the port
+    ['www.example.com/x', 'example.com', 'www.example.com'],
+    ['http://a.b:8080/x', 'a.b', 'a.b:8080'],
     ['ftp://x', 'x', 'x'],
     ['http://[::1]:3000/', '[::1]', '[::1]:3000'],
     ['file:///etc/passwd', '', ''],
-    ['not a url', 'not a url', 'not a url'], // does not parse: the input itself comes back
+    ['not a url', 'not a url', 'not a url'],
     ['javascript:alert(1)', 'javascript:alert(1)', 'javascript:alert(1)'],
   ];
   for (const [input, host, domain] of cases) {
@@ -37,8 +35,6 @@ test('url: hostOf / siteDomain keep the outputs the app had', () => {
 test('url: only http(s) becomes a link; the link never carries another scheme', () => {
   for (const ok of ['example.com', 'http://a.b', 'HTTPS://a.b', 'a.b:8080/x']) assert.equal(isHttpUrl(ok), true, ok);
   for (const no of ['ftp://x', 'file:///etc/passwd', 'ssh://host', 'chrome://settings']) assert.equal(isHttpUrl(no), false, no);
-  // A scheme without "//" is not a scheme to normalizeUrl: it becomes an https URL whose "host" is the word, which the browser
-  // never runs as script. What must hold is that no produced href starts with javascript: / data:.
   for (const risky of ['javascript:alert(1)', 'data:text/html,<b>', 'vbscript:x']) {
     assert.doesNotMatch(normalizeUrl(risky), /^(javascript|data|vbscript):/i, risky);
   }
@@ -50,12 +46,10 @@ test('strength: thresholds of the meters (28 / 40 / 70 bits)', () => {
   assert.equal(strengthLevel('abc').level, 'weak');
   assert.equal(strengthLevel('Tr0ub4dor&3-xkcd-battery').level, 'strong');
   assert.equal(strengthLevel('Tr0ub4dor&3-xkcd-battery').active, 4);
-  // Every bits value maps to exactly the (level, active) pair the 4-segment bar had.
   const edges: readonly (readonly [bits: number, level: string, active: number])[] = [[0, 'weak', 1], [27, 'weak', 1], [28, 'weak', 2], [39, 'weak', 2], [40, 'medium', 3], [69, 'medium', 3], [70, 'strong', 4], [200, 'strong', 4]];
   for (const [bits, level, active] of edges) assert.deepEqual(levelOf(bits), { level, active }, `${bits} bits`);
 });
 
-// A button that records every change, so the ORDER of what withBusy does is part of the test.
 function fakeButton(): { btn: BusyButton; events: string[] } {
   const events: string[] = [];
   let disabled = false;
@@ -103,12 +97,10 @@ test('masked inputs: the HTML only says type="text" data-masked; the autofill at
     assert.match(tag, /\bautocomplete="off"/, tag);
     assert.doesNotMatch(tag, /autocapitalize|autocorrect|spellcheck|data-lpignore|data-1p-ignore|data-bwignore|data-form-type/, `${tag} repeats attributes that secretInputAttrs sets`);
   }
-  // The single place that sets them has all of them.
   const js = readFileSync(new URL('../public/ui/secret-input.js', import.meta.url), 'utf8');
   for (const name of ['autocapitalize', 'autocorrect', 'spellcheck', 'autocomplete', 'data-lpignore', 'data-1p-ignore', 'data-bwignore', 'data-form-type']) {
     assert.ok(js.includes(name), `secret-input.js sets ${name}`);
   }
-  // ...and app.js runs it before anything else of its own.
   const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   const firstStatement = app.split('\n').find((l) => l.trim() !== '' && !l.startsWith('import ') && !l.startsWith('//'));
   assert.equal(firstStatement, 'applySecretInputs(document);');
