@@ -5,7 +5,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  guardBitwardenImportResponse,
+  guardExportResponse,
+  guardImportPreviewResponse,
+  guardImportResponse,
   guardClipboardCopyResponse,
   guardConfigResponse,
   guardCountResponse,
@@ -78,7 +80,9 @@ const CASES: readonly Case[] = [
   { name: 'guardClipboardCopyResponse', guard: guardClipboardCopyResponse, valid: { ok: true, seconds: 30 } },
   { name: 'guardGenerateResponse', guard: guardGenerateResponse, valid: { password: 'p4ss-w0rd', bits: 118.5 } },
   { name: 'guardMergeResponse', guard: guardMergeResponse, valid: { added: 1, skipped: 2 } },
-  { name: 'guardBitwardenImportResponse', guard: guardBitwardenImportResponse, valid: { added: 1, skipped: 2, ignored: 3 } },
+  { name: 'guardImportResponse', guard: guardImportResponse, valid: { added: 1, skipped: 2, ignored: 3, warnings: [{ key: 'import.warn.rowShape', params: { count: 1 } }] } },
+  { name: 'guardImportPreviewResponse', guard: guardImportPreviewResponse, valid: { count: 2, ignored: 0, warnings: [] } },
+  { name: 'guardExportResponse', guard: guardExportResponse, valid: { filename: 'x.json', mime: 'application/json', text: '{}', warnings: [{ key: 'export.warn.sshAsNote', params: { name: 'k' } }] } },
 ];
 
 for (const { name, guard, valid } of CASES) {

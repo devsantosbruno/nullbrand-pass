@@ -9,6 +9,8 @@ declare module "node:fs" {
   interface Stats {
     readonly uid: number;
     readonly mode: number;
+    // https://nodejs.org/docs/latest-v22.x/api/fs.html#statssize  ("the size of the file in bytes")
+    readonly size: number;
     // https://nodejs.org/docs/latest-v22.x/api/fs.html#statsisfile  ("true if the <fs.Stats> object describes a regular file")
     isFile(): boolean;
   }

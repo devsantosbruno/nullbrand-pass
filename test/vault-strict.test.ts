@@ -13,7 +13,7 @@ import * as vaultModule from '../src/vault.js';
 import * as cryptoModule from '../src/crypto.js';
 import { isObjectLike } from '../src/shared/guards.js';
 import { at, thrownKey, thrownMessage } from './support.js';
-import { parseBitwardenExport } from '../src/importers/bitwarden.js';
+import { planImport } from '../src/formats/index.js';
 import { isVaultItem } from '../src/shared/vault-types.js';
 
 const PW = 'test-master-password';
@@ -143,14 +143,14 @@ test('backup text: items are normalized like the file path does; unknown types a
   assert.deepEqual(await read({ items: [] }), []);
 });
 
-test('bitwarden: entries that would have been a TypeError are refused with err.bitwarden.invalidEntry', () => {
+test('import: entries that would have been a TypeError are refused with err.import.invalidEntry', () => {
   for (const exp of [{ items: [], folders: {} }, { items: [], folders: [null] }, { items: [null] }, { items: [{ type: 2, fields: [null] }] }, { items: [{ type: 1, login: { uris: {} } }] }]) {
-    assert.throws(() => parseBitwardenExport(JSON.stringify(exp)), (e) => thrownKey(e) === 'err.bitwarden.invalidEntry', JSON.stringify(exp));
+    assert.throws(() => planImport(JSON.stringify(exp)), (e) => thrownKey(e) === 'err.import.invalidEntry', JSON.stringify(exp));
   }
 });
 
-test('bitwarden: values that are not text are not text fields (the vault would have blanked them anyway)', () => {
-  const { items } = parseBitwardenExport(JSON.stringify({ folders: [{ id: 1, name: 5 }], items: [{ type: 1, name: 123, folderId: 1, creationDate: 1700000000000, login: { username: 5, password: true, uris: [{ uri: 7 }, { uri: 'https://ok' }] } }] }));
+test('import: values that are not text are not text fields (the vault would have blanked them anyway)', () => {
+  const { items } = planImport(JSON.stringify({ folders: [{ id: 1, name: 5 }], items: [{ type: 1, name: 123, folderId: 1, creationDate: 1700000000000, login: { username: 5, password: true, uris: [{ uri: 7 }, { uri: 'https://ok' }] } }] }));
   assert.deepEqual(items, [{ name: '(unnamed)', folder: '', favorite: false, createdAt: undefined, type: 'login', username: '', password: '', totp: '', uris: ['https://ok'], notes: '' }]);
   const item = normalizeItem(at(items, 0));
   assert.ok(isVaultItem(item));

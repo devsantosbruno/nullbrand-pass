@@ -1,0 +1,48 @@
+{
+  "encrypted": false,
+  "folders": [
+    {
+      "name": "pasta teste",
+      "id": "7b0f2985-ba8d-44ca-8195-b4e800143907"
+    }
+  ],
+  "items": [
+    {
+      "type": 1,
+      "name": "Teste",
+      "favorite": false,
+      "reprompt": 0,
+      "id": "9185c533-c897-49bf-b63f-b4e800142398",
+      "collectionIds": null,
+      "folderId": "7b0f2985-ba8d-44ca-8195-b4e800143907",
+      "fields": [],
+      "login": {
+        "uris": [],
+        "fido2Credentials": [],
+        "username": "testeee",
+        "password": "senha teste"
+      },
+      "passwordHistory": [],
+      "creationDate": "2026-10-19T01:13:19.433Z",
+      "revisionDate": "2026-10-19T01:13:19.433Z"
+    },
+    {
+      "type": 1,
+      "name": "teste sem pasta",
+      "favorite": false,
+      "reprompt": 0,
+      "id": "523d3b33-a45c-4809-bb36-b4e800145c55",
+      "collectionIds": null,
+      "fields": [],
+      "login": {
+        "uris": [],
+        "fido2Credentials": [],
+        "username": "teste sem pastaa",
+        "password": "teste sem pasta senha"
+      },
+      "passwordHistory": [],
+      "creationDate": "2026-10-19T01:14:07.850Z",
+      "revisionDate": "2026-10-19T01:14:07.850Z"
+    }
+  ]
+}

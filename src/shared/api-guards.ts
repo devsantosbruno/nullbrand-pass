@@ -4,13 +4,15 @@
 // goes to the console). The types are the ones of ./api.ts and ./vault-types.ts.
 import type {
   ApiErrorResponse,
-  BitwardenImportResponse,
   ClipboardCopyResponse,
   ConfigResponse,
   CountResponse,
+  ExportResponse,
   FolderDeleteResponse,
   FolderNameResponse,
   GenerateResponse,
+  ImportPreviewResponse,
+  ImportResponse,
   MergeResponse,
   OkResponse,
   PublicItem,
@@ -163,12 +165,57 @@ function isMergeResponse(value: unknown): value is MergeResponse {
 }
 export const guardMergeResponse: Guard<MergeResponse> = guardOf(isMergeResponse, mergeProblem);
 
-const bitwardenProblem = (value: unknown): Problem =>
-  fieldsProblem(value, 'response', [['added', 'number', isNumber], ['skipped', 'number', isNumber], ['ignored', 'number', isNumber]]);
-function isBitwardenImportResponse(value: unknown): value is BitwardenImportResponse {
-  return bitwardenProblem(value) === undefined;
+const warningProblem = (value: unknown, path: string): Problem =>
+  fieldsProblem(value, path, [['key', 'string', isString], ['params', 'object', (params) => isTranslateParams(params)]]);
+const warningsProblem = (value: unknown): Problem => {
+  if (!isUnknownArray(value)) return 'response.warnings: expected array';
+  for (const [index, warning] of value.entries()) {
+    const problem = warningProblem(warning, `response.warnings[${index}]`);
+    if (problem !== undefined) return problem;
+  }
+  return undefined;
+};
+
+const importProblem = (value: unknown): Problem =>
+  fieldsProblem(value, 'response', [
+    ['added', 'number', isNumber],
+    ['skipped', 'number', isNumber],
+    ['ignored', 'number', isNumber],
+    ['warnings', 'array of warnings', (warnings) => warningsProblem(warnings) === undefined],
+  ]);
+export function isImportResponse(value: unknown): value is ImportResponse {
+  return importProblem(value) === undefined;
 }
-export const guardBitwardenImportResponse: Guard<BitwardenImportResponse> = guardOf(isBitwardenImportResponse, bitwardenProblem);
+export const guardImportResponse: Guard<ImportResponse> = guardOf(isImportResponse, importProblem);
+
+const previewProblem = (value: unknown): Problem =>
+  fieldsProblem(value, 'response', [
+    ['count', 'number', isNumber],
+    ['ignored', 'number', isNumber],
+    ['warnings', 'array of warnings', (warnings) => warningsProblem(warnings) === undefined],
+  ]);
+export function isImportPreviewResponse(value: unknown): value is ImportPreviewResponse {
+  return previewProblem(value) === undefined;
+}
+export const guardImportPreviewResponse: Guard<ImportPreviewResponse> = guardOf(isImportPreviewResponse, previewProblem);
+
+// POST /api/import answers with a preview when the request was a dry run and with the result otherwise.
+export const guardImportAnswer: Guard<ImportResponse | ImportPreviewResponse> = (value) => {
+  if (isImportResponse(value) || isImportPreviewResponse(value)) return { ok: true, value };
+  return fail(importProblem(value) ?? previewProblem(value) ?? 'unexpected shape');
+};
+
+const exportProblem = (value: unknown): Problem =>
+  fieldsProblem(value, 'response', [
+    ['filename', 'string', isString],
+    ['mime', 'string', isString],
+    ['text', 'string', isString],
+    ['warnings', 'array of warnings', (warnings) => warningsProblem(warnings) === undefined],
+  ]);
+function isExportResponse(value: unknown): value is ExportResponse {
+  return exportProblem(value) === undefined;
+}
+export const guardExportResponse: Guard<ExportResponse> = guardOf(isExportResponse, exportProblem);
 
 // ---- vault items ----
 const BASE_STRING_KEYS = ['id', 'name', 'notes', 'folder', 'createdAt', 'updatedAt'] as const;

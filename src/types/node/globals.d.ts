@@ -52,6 +52,8 @@ interface BufferConstructor {
   // `totalLength` defaults to the sum of the lengths. Always copies. An empty list yields a zero-length Buffer.
   concat(list: readonly Uint8Array[], totalLength?: number): Buffer;
   isBuffer(obj: unknown): obj is Buffer;
+  // The bytes `text` takes in `encoding` (default 'utf8'), without allocating a Buffer.
+  byteLength(text: string, encoding?: BufferEncoding): number;
 }
 declare const Buffer: BufferConstructor;
 

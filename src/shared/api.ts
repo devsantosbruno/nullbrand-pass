@@ -63,8 +63,27 @@ export interface MergeResponse {
   added: number;
   skipped: number;
 }
-export interface BitwardenImportResponse extends MergeResponse {
+// A lossy or surprising step of an import / export, in the form the UI can translate (`key` + `params`, like an error).
+export interface ApiWarning {
+  key: string;
+  params: TranslateParams;
+}
+export interface ImportResponse extends MergeResponse {
   ignored: number;
+  warnings: ApiWarning[];
+}
+// What an import would do, without doing it (`dryRun`).
+export interface ImportPreviewResponse {
+  count: number;
+  ignored: number;
+  warnings: ApiWarning[];
+}
+// The unencrypted export travels as JSON, not as a download, so the warnings come with it.
+export interface ExportResponse {
+  filename: string;
+  mime: string;
+  text: string;
+  warnings: ApiWarning[];
 }
 // Every error answer: `key` + `params` let the UI translate it (see errText in i18n.ts).
 export interface ApiErrorResponse {
@@ -117,6 +136,16 @@ export interface GenerateRequest {
 export interface TextImportRequest {
   text: string;
 }
+export interface ImportRequest extends TextImportRequest {
+  folder?: string;
+  ignoreFolders?: boolean;
+  dryRun?: boolean;
+}
+export interface ExportRequest {
+  // The master password again: an unencrypted export is the one place the key held in memory is not enough.
+  password: string;
+  confirm: true;
+}
 export interface BackupImportRequest extends TextImportRequest {
   password: string;
 }
@@ -149,9 +178,10 @@ export interface ApiResponses {
   'POST /api/ssh/inspect': SshKeyResponse;
   'POST /api/clipboard/copy': ClipboardCopyResponse;
   'POST /api/generate': GenerateResponse;
-  'POST /api/import/bitwarden': BitwardenImportResponse;
+  'POST /api/import': ImportResponse | ImportPreviewResponse;
   'POST /api/import/backup': MergeResponse;
   'GET /api/export/backup': undefined;
+  'POST /api/export': ExportResponse;
   'POST /api/password': OkResponse;
   'POST /api/destroy': OkResponse;
   'POST /api/shutdown': undefined;

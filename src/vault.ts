@@ -12,6 +12,7 @@ import { isObjectLike, isStringArray, isUnknownArray, spreadOf } from './shared/
 import {
   CARD_KEYS,
   IDENTITY_KEYS,
+  FOLDER_MAX,
   LOGIN_KEYS,
   SSH_KEYS,
   isItemType,
@@ -268,7 +269,7 @@ export function normalizeItem(input: ItemInput, existing: VaultItem | null = nul
     ...Object.fromEntries(Object.entries(IDENTITY_FIELDS).map(([k, max]): [string, string] => [k, type === 'identity' ? str(input[k], max).trim() : ''])),
     ...Object.fromEntries(Object.entries(SSH_FIELDS).map(([k, max]): [string, string] => [k, type === 'ssh' ? sshValue(k, str(input[k], max)) : ''])),
     notes: str(input['notes'], 20000),
-    folder: str(input['folder'], 200).trim(),
+    folder: str(input['folder'], FOLDER_MAX).trim(),
     favorite: Boolean(input['favorite']),
     createdAt: existing?.createdAt || givenString(input['createdAt'], 'createdAt') || now,
     updatedAt: now,
@@ -334,7 +335,7 @@ export function normalizeStoredItem(raw: unknown, index: number = 0): VaultItem 
 }
 
 function cleanFolderName(name: unknown): string {
-  const clean = typeof name === 'string' ? name.slice(0, 200).trim() : '';
+  const clean = typeof name === 'string' ? name.slice(0, FOLDER_MAX).trim() : '';
   if (!clean) throw coded('err.vault.folderNameRequired', 'Enter the folder name.');
   return clean;
 }
@@ -613,6 +614,18 @@ export class Vault {
     await writeAtomic(destPath, this.serialize());
     return destPath;
   }
+}
+
+// Checks a master password against the vault file without touching the open vault. Rejects with a WrongPasswordError.
+export async function verifyMasterPassword(password: string, path: string = defaultVaultPath()): Promise<void> {
+  (await Vault.unlock(password, path, { migrate: false })).key.fill(0);
+}
+
+// Writes a file that holds secrets in the clear (an unencrypted export). It is created private to the owner (0600) and replaced
+// atomically, so it is never readable by anyone else, not even for a moment.
+export async function writePrivateFile(destPath: string, text: string): Promise<string> {
+  await writeAtomic(destPath, text);
+  return destPath;
 }
 
 // Reads a backup (another vault file) with its own password and returns the items.

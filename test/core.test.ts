@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Vault, readBackupItems } from '../src/vault.js';
 import { generatePassword, entropyBits } from '../src/generator.js';
-import { parseBitwardenExport } from '../src/importers/bitwarden.js';
+import { planImport } from '../src/formats/index.js';
 import { at, objectAt, parseJsonObject, present } from './support.js';
 
 const tmp = async () => mkdtemp(join(tmpdir(), 'vp-test-'));
@@ -108,7 +108,7 @@ test('entropyBits describes the password that generatePassword builds', () => {
   }
 });
 
-test('imports a Bitwarden export', () => {
+test('imports a file in the nested JSON layout', () => {
   const exp = {
     encrypted: false,
     folders: [{ id: 'f1', name: 'Work' }],
@@ -120,7 +120,7 @@ test('imports a Bitwarden export', () => {
       { type: 5, name: 'SSH key' },
     ],
   };
-  const { items, ignored } = parseBitwardenExport(JSON.stringify(exp));
+  const { items, ignored } = planImport(JSON.stringify(exp));
   assert.equal(items.length, 3);
   assert.equal(ignored, 2);
   const first = at(items, 0);
@@ -130,8 +130,10 @@ test('imports a Bitwarden export', () => {
   assert.equal(first.totp, 'JBSWY3DP');
   assert.match(first.notes, /PIN: 1234/);
   assert.equal(at(items, 1).type, 'note');
-  assert.match(at(items, 2).notes, /Card imported/);
-  assert.throws(() => parseBitwardenExport(JSON.stringify({ encrypted: true, data: 'x' })), /encrypted/);
+  const card = at(items, 2);
+  if (card.type !== 'card') assert.fail('a card must stay a card');
+  assert.deepEqual([card.cardNumber, card.notes], ['4111', 'brand: Visa']);
+  assert.throws(() => planImport(JSON.stringify({ encrypted: true, data: 'x' })), /encrypted/);
 });
 
 test('SSH key: generates, imports and normalizes the item', async () => {

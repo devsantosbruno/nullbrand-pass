@@ -9,7 +9,7 @@
   "exports": {
     ".": "./dist/src/vault.js",
     "./generator": "./dist/src/generator.js",
-    "./importers/bitwarden": "./dist/src/importers/bitwarden.js"
+    "./formats": "./dist/src/formats/index.js"
   },
   "files": [
     "dist",

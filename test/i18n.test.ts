@@ -82,10 +82,10 @@ test('errText(): translates by key, falls back to the message', () => {
 test('every i18n key referenced in src/ and public/ exists in both dictionaries', async () => {
   const { readdir } = await import('node:fs/promises');
   const files: URL[] = [];
-  for (const dir of ['../src/', '../src/importers/', '../public/']) {
+  for (const dir of ['../src/', '../src/formats/', '../public/']) {
     for (const f of await readdir(new URL(dir, import.meta.url))) if (f.endsWith('.js') || f.endsWith('.html')) files.push(new URL(dir + f, import.meta.url));
   }
-  const prefixes = 'err|cli|help|field|ssh|type|filter|sel|list|folder|folders|delete|move|val|pw|tools|gen|setup|unlock|quit|destroy|menu|sidebar|nav|nosession|copied|copy|aria|strength|meta|fav|edit|password|reveal|notes|identity|placeholder|import|clipboard|server|warn|lang|detail|item|sshpub|sshover|common';
+  const prefixes = 'err|cli|help|field|ssh|type|filter|sel|list|folder|folders|delete|move|val|pw|tools|gen|setup|unlock|quit|destroy|menu|sidebar|nav|nosession|copied|copy|aria|strength|meta|fav|edit|password|reveal|notes|identity|placeholder|import|export|clipboard|server|warn|lang|detail|item|sshpub|sshover|common';
   const re = new RegExp(`['"\`=]((?:${prefixes})\\.[A-Za-z0-9.]+)['"\`]`, 'g');
   const dynamic = /^(strength|reveal\.\w+|warn\.permFixed|cli\.field|cli\.kind|type)\.$/; // composed at runtime
   const missing = new Set<string>();
@@ -103,8 +103,8 @@ test('every i18n key referenced in src/ and public/ exists in both dictionaries'
 test('library errors carry the keys the dictionaries expect', async () => {
   const { WrongPasswordError } = await import('../src/crypto.js');
   const { generatePassword } = await import('../src/generator.js');
-  const { parseBitwardenExport } = await import('../src/importers/bitwarden.js');
+  const { planImport } = await import('../src/formats/index.js');
   assert.equal(new WrongPasswordError().key, 'err.wrongPassword');
   assert.throws(() => generatePassword({ upper: false, lower: false, digits: false, symbols: false }), (e) => thrownKey(e) === 'err.gen.noCharset' && /character type/.test(thrownMessage(e)));
-  assert.throws(() => parseBitwardenExport('nope'), (e) => thrownKey(e) === 'err.bitwarden.notJson');
+  assert.throws(() => planImport('nope'), (e) => thrownKey(e) === 'err.import.notJson');
 });

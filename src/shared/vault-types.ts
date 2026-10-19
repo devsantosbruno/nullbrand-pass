@@ -6,6 +6,9 @@ import { isObjectLike, isStringArray } from './guards.js';
 export const ITEM_TYPES = ['login', 'note', 'card', 'identity', 'ssh'] as const;
 export type ItemType = (typeof ITEM_TYPES)[number];
 
+// A folder name is a flat string of at most this many characters.
+export const FOLDER_MAX = 200;
+
 export const LOGIN_KEYS = ['username', 'password', 'totp'] as const;
 export const CARD_KEYS = ['cardholder', 'cardNumber', 'cardExpiry', 'cardCvv'] as const;
 export const IDENTITY_KEYS = [
