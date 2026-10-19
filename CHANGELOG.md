@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Trademark policy (`TRADEMARKS.md`) and written name-conflict review (`docs/trademark-check.md`).
 
 ### Changed
+- The web interface code is split into `app.ts` (composition), `features/` (one per area) and `ui/` (reusable components: confirm dialog, popup menu, icons, reveal toggle). Same screens and behavior. `npm run check` now also rejects `innerHTML`, `eval` and inline styles under `src/web/`.
 - The import response now carries `ignored` and `warnings`.
 - Removed wording that positioned the project against another product, and the matching npm keyword.
 
