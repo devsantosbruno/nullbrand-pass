@@ -32,6 +32,12 @@ import { $, $button, $dialog, $form, $input, $textarea, DomError, DomValueError,
 import { currentItem, state } from './state.js';
 import { strengthLevel } from './ui/strength.js';
 import { hostOf, isHttpUrl, normalizeUrl, siteDomain } from './ui/url.js';
+import { statusLine } from './ui/status-line.js';
+import { withBusy } from './ui/busy.js';
+import { applySecretInputs, isMasked, setMasked } from './ui/secret-input.js';
+
+// Before anything can be shown or focused: every masked input gets its autofill/IME attributes (S6).
+applySecretInputs(document);
 
 // ---------- i18n ----------
 // Dictionaries come from /locales/<lang>.json (same files as the CLI). `t` is replaced on language change.
@@ -346,39 +352,31 @@ onEnterOrClick($('#form-setup'), $button('#setup-btn'), async () => {
   const err = $('#setup-error');
   if (p1 !== p2) { err.textContent = t('setup.mismatch'); return; }
   if (p1.length < 8) { err.textContent = t('setup.short'); return; }
-  const btn = $button('#setup-btn');
-  btn.disabled = true;
-  btn.textContent = t('setup.creating');
   try {
-    await api('POST /api/setup', { guard: guardOkResponse, body: { password: p1 } });
-    setupPass.value = '';
-    $input('#setup-pass2').value = '';
-    await enterVault();
-    toast(t('setup.created'));
+    await withBusy($button('#setup-btn'), t('setup.creating'), () => t('setup.submit'), async () => {
+      await api('POST /api/setup', { guard: guardOkResponse, body: { password: p1 } });
+      setupPass.value = '';
+      $input('#setup-pass2').value = '';
+      await enterVault();
+      toast(t('setup.created'));
+    });
   } catch (ex) {
     err.textContent = msgOf(ex);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = t('setup.submit');
   }
 });
 
 onEnterOrClick($('#form-unlock'), $button('#unlock-btn'), async () => {
-  const btn = $button('#unlock-btn');
   const err = $('#unlock-error');
   err.textContent = '';
-  btn.disabled = true;
-  btn.textContent = t('unlock.unlocking');
   try {
-    await api('POST /api/unlock', { guard: guardOkResponse, body: { password: $input('#unlock-pass').value } });
-    $input('#unlock-pass').value = '';
-    await enterVault();
+    await withBusy($button('#unlock-btn'), t('unlock.unlocking'), () => t('unlock.submit'), async () => {
+      await api('POST /api/unlock', { guard: guardOkResponse, body: { password: $input('#unlock-pass').value } });
+      $input('#unlock-pass').value = '';
+      await enterVault();
+    });
   } catch (ex) {
     err.textContent = msgOf(ex);
     $input('#unlock-pass').select();
-  } finally {
-    btn.disabled = false;
-    btn.textContent = t('unlock.submit');
   }
 });
 
@@ -1224,19 +1222,6 @@ function paintEditTitle(item: VaultItem | null = state.editing): void {
 // ---------- Edit ----------
 const form = $form('#detail-edit');
 // The controls of the form, by name (the identity ones were just built by buildIdentityForm).
-// Secret fields are type="text" masked by CSS (-webkit-text-security), never type="password":
-// that is what keeps browsers from offering to save/fill passwords. Only if CSS masking is
-// unsupported do we fall back to type="password" so secrets are never shown in the clear.
-const CAN_CSS_MASK = typeof CSS !== 'undefined' && CSS.supports('-webkit-text-security', 'disc');
-function isMasked(input: HTMLInputElement): boolean {
-  return input.hasAttribute('data-masked');
-}
-function setMasked(input: HTMLInputElement, masked: boolean): void {
-  input.toggleAttribute('data-masked', masked);
-  if (!CAN_CSS_MASK) input.type = masked ? 'password' : 'text';
-}
-if (!CAN_CSS_MASK) queryAll(document, 'input[data-masked]', HTMLInputElement).forEach((i) => { i.type = 'password'; });
-
 const fieldInput = (name: string): HTMLInputElement => expectInstance(form.elements.namedItem(name), HTMLInputElement, `form field ${name}`);
 const fieldTextarea = (name: string): HTMLTextAreaElement => expectInstance(form.elements.namedItem(name), HTMLTextAreaElement, `form field ${name}`);
 const fieldRadios = (name: string): RadioNodeList => expectInstance(form.elements.namedItem(name), RadioNodeList, `form field ${name}`);
@@ -1770,7 +1755,7 @@ $('#btn-generator').addEventListener('click', () => openGenerator());
 
 // ---------- Import / Backup ----------
 const dlgTools = $dialog('#dlg-tools');
-const toolsMsg = (msg: string | null, ok = false): void => { const m = $('#tools-msg'); m.textContent = msg; m.classList.toggle('ok', ok); };
+const toolsMsg = statusLine($('#tools-msg'));
 $('#btn-tools').addEventListener('click', () => { toolsMsg(''); dlgTools.showModal(); });
 $('#btn-tools-close').addEventListener('click', () => dlgTools.close());
 
@@ -1796,7 +1781,7 @@ const importFile = $input('#import-file');
 const importFolder = $input('#import-folder');
 const importFoldersMode = query(document, '#import-folders-mode', HTMLSelectElement);
 const importRun = $button('#btn-import-run');
-const importMsg = (msg: string | null, ok = false): void => { const m = $('#import-msg'); m.textContent = msg; m.classList.toggle('ok', ok); };
+const importMsg = statusLine($('#import-msg'));
 
 let importText: string | undefined;
 // Answers arrive out of order when the options change quickly: only the latest one is shown.
@@ -1887,7 +1872,7 @@ const dlgExport = $dialog('#dlg-export');
 const exportProtection = query(document, '#export-protection', HTMLSelectElement);
 const exportConfirm = $input('#export-confirm');
 const exportPassword = $input('#export-password');
-const exportMsg = (msg: string | null, ok = false): void => { const m = $('#export-msg'); m.textContent = msg; m.classList.toggle('ok', ok); };
+const exportMsg = statusLine($('#export-msg'));
 
 // Encrypted is the native backup, readable only by nullbrand; unencrypted is a JSON file any app can be pointed at.
 function renderExportChoices(): void {
@@ -1966,7 +1951,7 @@ $('#btn-restore').addEventListener('click', async () => {
 const dlgPassword = $dialog('#dlg-password');
 const dlgShutdown = $dialog('#dlg-shutdown');
 const dlgDestroy = $dialog('#dlg-destroy');
-const pwMsg = (msg: string | null, ok = false): void => { const m = $('#pw-msg'); m.textContent = msg; m.classList.toggle('ok', ok); };
+const pwMsg = statusLine($('#pw-msg'));
 const secBtn = $button('#btn-security');
 const secItems = $('#security-items');
 const placeSecMenu = (): void => {

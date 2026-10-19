@@ -31,11 +31,11 @@
       <h1 data-i18n="setup.title"></h1>
       <p class="muted" data-i18n="setup.intro"></p>
       <label><span data-i18n="field.masterPassword"></span>
-        <input type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" id="setup-pass" data-i18n-placeholder="setup.placeholder" minlength="8" required autocomplete="off">
+        <input type="text" data-masked id="setup-pass" data-i18n-placeholder="setup.placeholder" minlength="8" required autocomplete="off">
       </label>
       <div class="meter"><span id="setup-meter"></span></div>
       <label><span data-i18n="setup.confirm"></span>
-        <input type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" id="setup-pass2" data-i18n-placeholder="setup.confirmPlaceholder" minlength="8" required autocomplete="off">
+        <input type="text" data-masked id="setup-pass2" data-i18n-placeholder="setup.confirmPlaceholder" minlength="8" required autocomplete="off">
       </label>
       <p class="error" id="setup-error" role="alert"></p>
       <button class="btn primary block" type="button" id="setup-btn" data-i18n="setup.submit"></button>
@@ -49,7 +49,7 @@
       <h1 data-i18n="unlock.title"></h1>
       <p class="muted small"><code id="unlock-path"></code></p>
       <label><span data-i18n="field.masterPassword"></span>
-        <input type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" id="unlock-pass" data-i18n-placeholder="unlock.placeholder" required autocomplete="off">
+        <input type="text" data-masked id="unlock-pass" data-i18n-placeholder="unlock.placeholder" required autocomplete="off">
       </label>
       <p class="error" id="unlock-error" role="alert"></p>
       <button class="btn primary block" type="button" id="unlock-btn" data-i18n="unlock.submit"></button>
@@ -178,7 +178,7 @@
           <label><span data-i18n="field.username"></span> <input name="username" autocomplete="off" maxlength="500" placeholder="you@example.com"></label>
           <label><span data-i18n="field.password"></span>
             <span class="input-row">
-              <input name="password" type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" autocomplete="off" maxlength="2000" class="mono">
+              <input name="password" type="text" data-masked autocomplete="off" maxlength="2000" class="mono">
               <button type="button" class="btn ghost icon" id="edit-toggle" data-i18n-title="password.toggle" data-i18n-aria="password.show"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path id="edit-eye-slash" d="M3 3l18 18"/></svg></button>
               <button type="button" class="btn ghost" id="edit-generate" data-i18n="password.generate"></button>
             </span>
@@ -190,7 +190,7 @@
           <label><span data-i18n="field.cardholder"></span> <input name="cardholder" autocomplete="off" maxlength="128" placeholder="JANE Q DOE"></label>
           <label><span data-i18n="field.cardNumber"></span>
             <span class="input-row">
-              <input name="cardNumber" type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" autocomplete="off" inputmode="numeric" maxlength="19" class="mono" placeholder="1234 5678 9012 3456">
+              <input name="cardNumber" type="text" data-masked autocomplete="off" inputmode="numeric" maxlength="19" class="mono" placeholder="1234 5678 9012 3456">
               <button type="button" class="btn ghost icon" data-reveal="cardNumber"></button>
             </span>
           </label>
@@ -198,7 +198,7 @@
             <label><span data-i18n="field.expiry"></span> <input name="cardExpiry" autocomplete="off" inputmode="numeric" maxlength="7" class="mono" placeholder="12/2028"></label>
             <label><span data-i18n="field.cvv"></span>
               <span class="input-row">
-                <input name="cardCvv" type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" autocomplete="off" inputmode="numeric" maxlength="4" class="mono" placeholder="•••">
+                <input name="cardCvv" type="text" data-masked autocomplete="off" inputmode="numeric" maxlength="4" class="mono" placeholder="•••">
                 <button type="button" class="btn ghost icon" data-reveal="cardCvv"></button>
               </span>
             </label>
@@ -242,7 +242,7 @@
           </label>
           <label><span data-i18n="ssh.private"></span>
             <span class="input-row">
-              <input name="sshPrivateKey" type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" readonly autocomplete="off" data-i18n-placeholder="ssh.privatePlaceholder">
+              <input name="sshPrivateKey" type="text" data-masked readonly autocomplete="off" data-i18n-placeholder="ssh.privatePlaceholder">
               <button type="button" class="btn ghost icon" id="ssh-reveal"></button>
               <button type="button" class="btn ghost icon" data-ssh-copy="private" data-i18n-aria="ssh.copyPrivate"></button>
             </span>
@@ -325,7 +325,7 @@
         <h3 data-i18n="tools.restore.title"></h3>
         <p class="muted small" data-i18n="tools.restore.help"></p>
         <input type="file" id="file-backup" accept=".json,application/json">
-        <input type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" id="backup-pass" data-i18n-placeholder="tools.restore.passPlaceholder" autocomplete="off">
+        <input type="text" data-masked id="backup-pass" data-i18n-placeholder="tools.restore.passPlaceholder" autocomplete="off">
         <button class="btn ghost" id="btn-restore" data-i18n="tools.restore.button"></button>
       </section>
 
@@ -380,7 +380,7 @@
       <section class="tool" id="export-plain" hidden>
         <p class="warn-box" role="alert" data-i18n="export.warning"></p>
         <label class="check"><input type="checkbox" id="export-confirm"> <span data-i18n="export.dlg.confirm"></span></label>
-        <input type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" id="export-password" data-i18n-placeholder="export.dlg.password" data-i18n-aria="export.dlg.password" autocomplete="off">
+        <input type="text" data-masked id="export-password" data-i18n-placeholder="export.dlg.password" data-i18n-aria="export.dlg.password" autocomplete="off">
       </section>
 
       <ul class="warn-list" id="export-warnings"></ul>
@@ -398,8 +398,8 @@
     <div class="dialog-body">
       <h2 data-i18n="menu.changePassword"></h2>
       <section class="tool">
-        <input type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" id="pw-current" data-i18n-placeholder="pw.current" autocomplete="off">
-        <input type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" id="pw-next" data-i18n-placeholder="pw.next" autocomplete="off">
+        <input type="text" data-masked id="pw-current" data-i18n-placeholder="pw.current" autocomplete="off">
+        <input type="text" data-masked id="pw-next" data-i18n-placeholder="pw.next" autocomplete="off">
       </section>
       <p class="error" id="pw-msg" role="status"></p>
       <div class="actions">
@@ -416,7 +416,7 @@
       <h2 data-i18n="destroy.title"></h2>
       <p id="destroy-text"></p>
       <p data-i18n="destroy.confirm"></p>
-      <input type="text" data-masked autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" id="destroy-confirm" data-i18n-placeholder="unlock.placeholder" autocomplete="off" data-i18n-aria="field.masterPassword">
+      <input type="text" data-masked id="destroy-confirm" data-i18n-placeholder="unlock.placeholder" autocomplete="off" data-i18n-aria="field.masterPassword">
       <p class="error" id="destroy-msg" role="alert"></p>
       <div class="actions">
         <span class="grow"></span>
