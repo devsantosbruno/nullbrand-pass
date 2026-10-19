@@ -168,6 +168,15 @@ declare function setInterval(callback: () => void, delay?: number): NodeJS.Timeo
 declare function clearTimeout(timeout: NodeJS.Timeout): void;
 declare function clearInterval(timeout: NodeJS.Timeout): void;
 
+// https://nodejs.org/docs/latest-v22.x/api/util.html#class-utiltextencoder  (global; encodes to UTF-8)
+declare class TextEncoder {
+  encode(input?: string): Uint8Array<ArrayBuffer>;
+}
+// https://nodejs.org/docs/latest-v22.x/api/util.html#class-utiltextdecoder  (global; decodes UTF-8 by default)
+declare class TextDecoder {
+  decode(input?: Uint8Array): string;
+}
+
 // https://nodejs.org/docs/latest-v22.x/api/url.html#class-url  (a global since Node 10)
 declare class URL {
   // Docs: "A TypeError will be thrown if the input or base are not valid URLs"; observed code ERR_INVALID_URL. Non-string arguments are
