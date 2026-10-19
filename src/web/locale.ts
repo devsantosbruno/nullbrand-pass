@@ -11,7 +11,6 @@ let lang: Lang = FALLBACK;
 let translate: Translator = createT(lang, dicts);
 
 export const t: Translator = (key, params) => translate(key, params);
-export const getLang = (): Lang => lang;
 export function setLocale(next: Lang): void {
   lang = next;
   translate = createT(lang, dicts);
