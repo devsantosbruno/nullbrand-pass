@@ -28,16 +28,26 @@ import type { Guard } from './api-guards.js';
 import { errorMessage } from './guards.js';
 import { isItemType } from './vault-types.js';
 import type { IdentityKey, ItemType, VaultItem } from './vault-types.js';
-import { $, $button, $dialog, $form, $input, $textarea, DomError, DomValueError, at, containsTarget, data, dataOneOf, el, expectInstance, firstFile, oneOf, query, queryAll, textOf, tx } from './dom.js';
+import { $, $button, $dialog, $form, $input, $textarea, DomError, DomValueError, at, data, dataOneOf, el, expectInstance, firstFile, oneOf, query, queryAll, textOf, tx } from './dom.js';
 import { currentItem, state } from './state.js';
 import { strengthLevel } from './ui/strength.js';
 import { hostOf, isHttpUrl, normalizeUrl, siteDomain } from './ui/url.js';
 import { statusLine } from './ui/status-line.js';
 import { withBusy } from './ui/busy.js';
 import { applySecretInputs, isMasked, setMasked } from './ui/secret-input.js';
+import { createRevealToggle } from './ui/reveal-toggle.js';
+import type { RevealToggle } from './ui/reveal-toggle.js';
+import { confirm, openDialog } from './ui/dialog.js';
+import { createMenu, flipUp } from './ui/menu.js';
+import { digits, fmtCardExpiry, fmtCardNumber, maskDate, maskDigits, maskPhone } from './ui/masks.js';
+import { FIELD_VALIDATORS } from './ui/validators.js';
+import type { ValidatedField } from './ui/validators.js';
+import { applyIcons, icon, iconNameOf } from './ui/icons.js';
+import type { IconName } from './ui/icons.js';
 
 // Before anything can be shown or focused: every masked input gets its autofill/IME attributes (S6).
 applySecretInputs(document);
+applyIcons(document);
 
 // ---------- i18n ----------
 // Dictionaries come from /locales/<lang>.json (same files as the CLI). `t` is replaced on language change.
@@ -245,9 +255,7 @@ function setLang(next: Lang, { persist = false }: { persist?: boolean } = {}): v
   applyI18n();
   paintSectionTitles();
   paintEditTitle(state.editing);
-  syncEye();
-  sshPaintReveal();
-  queryAll(form, '[data-reveal]', HTMLButtonElement).forEach(paintReveal);
+  for (const toggle of revealToggles) toggle.repaint();
   setFolderValue(folderInput.value);
   if (!$('#screen-vault').hidden) {
     renderSidebar();
@@ -442,17 +450,12 @@ function setFolderValue(v: string): void {
   label.classList.toggle('placeholder', !v);
 }
 
-function closeFolderMenu(): void {
-  folderMenu.hidden = true;
-  folderTrigger.setAttribute('aria-expanded', 'false');
-}
-
 function renderFolderSelect(): void {
   const opt = (label: string, value: string): HTMLButtonElement => {
     const b = el('button', { type: 'button', className: 'select-item', role: 'option', textContent: label });
     b.setAttribute('aria-selected', String(folderInput.value === value));
     b.addEventListener('click', () => {
-      closeFolderMenu();
+      folderMenuHandle.close();
       setFolderValue(value);
       folderTrigger.focus();
     });
@@ -464,26 +467,15 @@ function renderFolderSelect(): void {
   folderMenu.replaceChildren(...list.map((f) => opt(f, f)), none);
 }
 
-folderTrigger.addEventListener('click', () => {
-  if (!folderMenu.hidden) return closeFolderMenu();
-  renderFolderSelect();
-  folderMenu.hidden = false;
-  const r = folderTrigger.getBoundingClientRect();
-  const below = window.innerHeight - r.bottom;
-  const need = Math.min(folderMenu.offsetHeight, 240) * (r.height / folderTrigger.offsetHeight) + 8;
-  folderMenu.classList.toggle('up', below < need && r.top > below);
-  folderTrigger.setAttribute('aria-expanded', 'true');
-  expectInstance(folderMenu.querySelector('[aria-selected="true"]') || folderMenu.firstElementChild, HTMLElement, 'folder menu item').focus();
+const folderMenuHandle = createMenu({
+  trigger: folderTrigger,
+  menu: folderMenu,
+  itemSelector: '.select-item',
+  onOpen: renderFolderSelect,
+  place: flipUp,
+  onResize: 'close',
+  initialFocus: () => folderMenu.querySelector('[aria-selected="true"]') || folderMenu.firstElementChild,
 });
-folderMenu.addEventListener('keydown', (e) => {
-  const items = queryAll(folderMenu, '.select-item', HTMLElement);
-  const i = items.findIndex((item) => item === document.activeElement);
-  if (e.key === 'ArrowDown') { e.preventDefault(); at(items, (i + 1) % items.length).focus(); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); at(items, (i - 1 + items.length) % items.length).focus(); }
-  else if (e.key === 'Escape') { e.stopPropagation(); closeFolderMenu(); folderTrigger.focus(); }
-});
-document.addEventListener('click', (e) => { if (!containsTarget(folderSelect, e.target)) closeFolderMenu(); });
-window.addEventListener('resize', closeFolderMenu);
 
 function renderSidebar(): void {
   $('#count-all').textContent = String(state.items.length);
@@ -496,12 +488,7 @@ function renderSidebar(): void {
     const n = state.items.filter((i) => i.folder === f).length;
     const btn = el('button', { className: `folder${state.folder === f ? ' active' : ''}`, title: f }, el('span', { className: 'lbl' }, el('span', { className: 'fcount', textContent: n }), el('span', { className: 't', textContent: f })));
     btn.addEventListener('click', () => { state.folder = f; state.filter = 'all'; renderSidebar(); renderList(); });
-    const pencil = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    for (const [k, v] of Object.entries({ width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) pencil.setAttribute(k, String(v));
-    const pp = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pp.setAttribute('d', 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z');
-    pencil.append(pp);
-    const edit = el('button', { className: 'folder-edit', type: 'button', title: t('folder.editAria', { name: f }) }, pencil);
+    const edit = el('button', { className: 'folder-edit', type: 'button', title: t('folder.editAria', { name: f }) }, icon('pen', { size: 14, strokeWidth: 2 }));
     edit.setAttribute('aria-label', t('folder.editAria', { name: f }));
     edit.addEventListener('click', () => editFolder(f));
     nav.append(el('div', { className: 'folder-row' }, btn, edit));
@@ -518,17 +505,14 @@ function promptNewFolder(): Promise<string | null> {
   folderName.value = '';
   $('#folder-msg').textContent = '';
   $button('#btn-folder-create').disabled = true;
-  dlgFolder.returnValue = '';
-  dlgFolder.showModal();
+  const closed = openDialog(dlgFolder);
   folderName.focus();
-  return new Promise((resolve) => {
-    dlgFolder.addEventListener('close', () => {
-      const name = folderName.value.trim().slice(0, 200);
-      if (dlgFolder.returnValue !== 'ok' || !name) return resolve(null);
-      api('POST /api/folders', { guard: guardFolderNameResponse, body: { name } })
-        .then(async (r) => { state.folders = await api('GET /api/folders', { guard: guardFolderList }); resolve(r.name); })
-        .catch((ex: unknown) => { toastError(ex); resolve(null); });
-    }, { once: true });
+  return closed.then((answer) => {
+    const name = folderName.value.trim().slice(0, 200);
+    if (answer !== 'ok' || !name) return null;
+    return api('POST /api/folders', { guard: guardFolderNameResponse, body: { name } })
+      .then(async (r) => { state.folders = await api('GET /api/folders', { guard: guardFolderList }); return r.name; })
+      .catch((ex: unknown) => { toastError(ex); return null; });
   });
 }
 folderName.addEventListener('input', () => {
@@ -695,17 +679,12 @@ const selBar = $('#sel-bar');
 const selMenu = $('#sel-menu');
 const selFolderBtn = $button('#sel-folder');
 
-function closeSelMenu(): void {
-  selMenu.hidden = true;
-  selFolderBtn.setAttribute('aria-expanded', 'false');
-}
-
 function renderSelectionBar(): void {
   const ids = new Set(state.items.map((i) => i.id));
   for (const id of state.selection) if (!ids.has(id)) state.selection.delete(id);
   const n = state.selection.size;
   selBar.hidden = n === 0;
-  if (n === 0) { closeSelMenu(); return; }
+  if (n === 0) { selMenuHandle.close(); return; }
   $('#sel-count').textContent = t('sel.count', { count: n });
   const vis = visibleItems();
   const inVis = vis.filter((i) => state.selection.has(i.id)).length;
@@ -728,7 +707,7 @@ $('#sel-cancel').addEventListener('click', clearSelection);
 
 async function moveSelection(folder: string): Promise<void> {
   const ids = [...state.selection];
-  closeSelMenu();
+  selMenuHandle.close();
   try {
     await api('POST /api/items/bulk', { guard: guardCountResponse, body: { action: 'move', ids, folder } });
     state.selection.clear();
@@ -737,8 +716,8 @@ async function moveSelection(folder: string): Promise<void> {
   } catch (ex) { toastError(ex); }
 }
 
-selFolderBtn.addEventListener('click', () => {
-  if (!selMenu.hidden) return closeSelMenu();
+// The items are built each time it opens: they follow the folders as they are then.
+function renderSelMenu(): void {
   const opt = (label: string, onClick: () => void | Promise<void>, extra: { sep?: boolean; count?: number } = {}): HTMLButtonElement => {
     const b = el('button', { type: 'button', className: `select-item${extra.sep ? ' sep' : ''}` }, el('span', { textContent: label }), extra.count != null ? el('span', { className: 'n', textContent: extra.count }) : null);
     b.setAttribute('role', 'menuitem');
@@ -749,41 +728,19 @@ selFolderBtn.addEventListener('click', () => {
     ...folders().map((f) => opt(f, () => moveSelection(f), { count: state.items.filter((i) => i.folder === f).length })),
     opt(t('folder.newEllipsis'), async () => {
       const name = await promptNewFolder();
-      if (name) moveSelection(name); else closeSelMenu();
+      if (name) moveSelection(name); else selMenuHandle.close();
     }, { sep: folders().length > 0 }),
     opt(t('folder.none'), () => moveSelection(''))
   );
-  selMenu.hidden = false;
-  selFolderBtn.setAttribute('aria-expanded', 'true');
-  expectInstance(selMenu.firstElementChild, HTMLElement, 'sel-menu first item').focus();
-});
-selMenu.addEventListener('keydown', (e) => {
-  const items = queryAll(selMenu, '.select-item', HTMLElement);
-  const idx = items.findIndex((item) => item === document.activeElement);
-  if (e.key === 'ArrowDown') { e.preventDefault(); at(items, (idx + 1) % items.length).focus(); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); at(items, (idx - 1 + items.length) % items.length).focus(); }
-  else if (e.key === 'Escape') { e.stopPropagation(); closeSelMenu(); selFolderBtn.focus(); }
-});
-document.addEventListener('click', (e) => { if (!selMenu.hidden && !containsTarget(selMenu, e.target) && e.target !== selFolderBtn) closeSelMenu(); });
+}
+const selMenuHandle = createMenu({ trigger: selFolderBtn, menu: selMenu, itemSelector: '.select-item', onOpen: renderSelMenu });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && state.selection.size && selMenu.hidden && !document.querySelector('dialog[open]')) clearSelection();
+  if (e.key === 'Escape' && state.selection.size && !selMenuHandle.isOpen && !document.querySelector('dialog[open]')) clearSelection();
 });
 
 // Delete confirmation modal (replaces the native confirm())
-const dlgDelete = $dialog('#dlg-delete');
-function confirmDelete(title: string, text: string, label: string = t('common.delete')): Promise<boolean> {
-  $('#delete-title').textContent = title;
-  $('#delete-text').textContent = text;
-  $('#btn-delete-confirm').textContent = label;
-  dlgDelete.returnValue = '';
-  dlgDelete.showModal();
-  $('#btn-delete-cancel').focus();
-  return new Promise((resolve) => {
-    dlgDelete.addEventListener('close', () => resolve(dlgDelete.returnValue === 'ok'), { once: true });
-  });
-}
-$('#btn-delete-cancel').addEventListener('click', () => dlgDelete.close());
-$('#btn-delete-confirm').addEventListener('click', () => dlgDelete.close('ok'));
+const confirmDelete = (title: string, text: string, label: string): Promise<boolean> =>
+  confirm({ title, body: text, okLabel: label, cancelLabel: t('common.cancel'), tone: 'danger' });
 
 $('#sel-delete').addEventListener('click', async () => {
   const ids = [...state.selection];
@@ -830,51 +787,7 @@ async function select(id: string): Promise<void> {
   renderView();
 }
 
-const ICONS = {
-  copy: ['M9 9h10v10H9z', 'M5 15V5h10'],
-  eye: ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z', 'circle:12,12,3'],
-  'eye-off': ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z', 'circle:12,12,3', 'M4 4l16 16'],
-  external: ['M14 4h6v6', 'M20 4l-9 9', 'M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'],
-  user: ['M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2', 'circle:12,7,4'],
-  id: ['M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'circle:9,11,2.5', 'M5 17c.6-2 2-3 4-3s3.4 1 4 3', 'M15 9h4', 'M15 13h4'],
-  card: ['M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z', 'M2 10h20', 'M6 15h4'],
-  pencil: ['M7 3a2.85 2.85 0 1 0-4 4L16.5 20.5L22 22l-1.5-5.5z', 'M9 5l-4 4'],
-  'key-down': ['circle:7.5,8.5,4.5', 'M10.7 11.7l9.8 9.8', 'M17 18l-3 3', 'M14.5 15.5L12 18'],
-  pin: ['M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z', 'circle:12,10,3'],
-  key: ['circle:7.5,15.5,4.5', 'M10.7 12.3l9.8-9.8', 'M16 7l3 3', 'M14 9l2 2'],
-  shield: ['M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z', 'M9 12l2 2 4-4'],
-  server: ['M4 4h16a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z', 'M4 13h16a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z', 'M7 7.5h.01', 'M7 16.5h.01'],
-  file: ['M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z', 'M14 3v5h5', 'M9 13h6', 'M9 17h6'],
-  download: ['M12 4v11', 'M7 11l5 5 5-5', 'M5 20h14'],
-  star: ['M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z'],
-} as const;
-type IconName = keyof typeof ICONS;
-const isIconName = (name: string): name is IconName => Object.hasOwn(ICONS, name);
 const TYPE_ICONS: Readonly<Partial<Record<ItemType, IconName>>> = { note: 'pencil', card: 'card', identity: 'id', ssh: 'key-down' };
-function icon(name: IconName, filled = false): SVGSVGElement {
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  for (const [k, v] of Object.entries({ width: 18, height: 18, viewBox: '0 0 24 24', fill: filled ? 'currentColor' : 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(k, String(v));
-  for (const part of ICONS[name]) {
-    let n: SVGCircleElement | SVGPathElement;
-    if (part.startsWith('circle:')) {
-      const [cx = '', cy = '', r = ''] = part.slice(7).split(',');
-      n = document.createElementNS(ns, 'circle');
-      n.setAttribute('cx', cx); n.setAttribute('cy', cy); n.setAttribute('r', r);
-    } else {
-      n = document.createElementNS(ns, 'path');
-      n.setAttribute('d', part);
-    }
-    svg.append(n);
-  }
-  return svg;
-}
-// The icon named by a data-icon attribute.
-function iconNameOf(node: HTMLElement): IconName {
-  const name = data(node, 'icon');
-  if (!isIconName(name)) throw new DomValueError('data-icon is not a known icon');
-  return name;
-}
 const iconBtn = (name: IconName, label: string, className = 'dv-icon-btn'): HTMLButtonElement => {
   const b = el('button', { className, type: 'button' });
   b.setAttribute('aria-label', label);
@@ -943,7 +856,7 @@ function renderView(): void {
   const fav = $('#btn-fav');
   fav.setAttribute('aria-pressed', String(Boolean(i.favorite)));
   fav.setAttribute('aria-label', t(i.favorite ? 'fav.remove' : 'fav.add'));
-  fav.replaceChildren(icon('star', Boolean(i.favorite)));
+  fav.replaceChildren(icon('star', { filled: Boolean(i.favorite) }));
   $('#view-chips').replaceChildren(
     el('span', { className: 'dv-chip', textContent: t(i.type === 'note' ? 'type.secureNote' : `type.${['card', 'identity', 'ssh'].includes(i.type) ? i.type : 'login'}`) }),
     ...(i.folder ? [el('span', { className: 'dv-chip', textContent: i.folder })] : [])
@@ -1119,34 +1032,6 @@ function sshConfig({ name = '', sshAlgo = 'ed25519', sshHost = '', sshUser = '',
 }
 
 // ---------- Identity ----------
-const digits = (max: number) => (v: string): string => v.replace(/\D/g, '').slice(0, max);
-const maskDigits = (pattern: string) => (v: string): string => {
-  const n = (pattern.match(/#/g) || []).length;
-  const d = v.replace(/\D/g, '').slice(0, n);
-  let out = '', k = 0;
-  for (const ch of pattern) { if (k >= d.length) break; out += ch === '#' ? d.charAt(k++) : ch; }
-  return out;
-};
-// Date DD/MM/YYYY: day 01–31, month 01–12, year from (current year − 200) to (current year + 1).
-const maskDate = (v: string): string => {
-  let d = v.replace(/\D/g, '').slice(0, 8);
-  if (d.length && d.charAt(0) > '3') d = `0${d}`;
-  if (d.length >= 2) d = String(Math.min(31, Math.max(1, Number(d.slice(0, 2))))).padStart(2, '0') + d.slice(2);
-  if (d.length >= 3 && d.charAt(2) > '1') d = `${d.slice(0, 2)}0${d.slice(2)}`;
-  if (d.length >= 4) d = d.slice(0, 2) + String(Math.min(12, Math.max(1, Number(d.slice(2, 4))))).padStart(2, '0') + d.slice(4);
-  if (d.length === 8) {
-    const now = new Date().getFullYear();
-    d = d.slice(0, 4) + Math.min(now + 1, Math.max(now - 200, Number(d.slice(4))));
-  }
-  return [d.slice(0, 2), d.slice(2, 4), d.slice(4)].filter(Boolean).join('/');
-};
-// Brazilian phone (12) 34567-8910 — a 10-digit landline becomes (12) 3456-7891.
-const maskPhone = (v: string): string => {
-  const d = v.replace(/\D/g, '').slice(0, 11);
-  if (d.length <= 2) return d.length ? `(${d}` : '';
-  const split = d.length > 10 ? 7 : 6;
-  return `(${d.slice(0, 2)}) ${d.slice(2, split)}${d.length > split ? `-${d.slice(split)}` : ''}`;
-};
 interface IdentityField {
   key: IdentityKey;
   label: string;
@@ -1259,68 +1144,31 @@ form.addEventListener('change', (e) => {
   if (target instanceof HTMLInputElement && target.name === 'type') setType(target.value);
 });
 
-const fmtCardNumber = (v: string): string => v.replace(/\D/g, '').slice(0, 16).replace(/(\d{4})(?=\d)/g, '$1 ');
-// Expiry MM/YYYY: month 01–12, year from the current year to current year + 100.
-const fmtCardExpiry = (v: string): string => {
-  let d = v.replace(/\D/g, '');
-  if (d.length && d.charAt(0) > '1') d = `0${d}`;
-  d = d.slice(0, 6);
-  if (d.length >= 2) {
-    let m = Number(d.slice(0, 2));
-    m = Math.min(12, Math.max(1, m));
-    d = String(m).padStart(2, '0') + d.slice(2);
-  }
-  if (d.length === 6) {
-    const min = new Date().getFullYear();
-    const y = Math.min(min + 100, Math.max(min, Number(d.slice(2))));
-    d = d.slice(0, 2) + y;
-  }
-  return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
-};
 fCardNumber.addEventListener('input', () => { fCardNumber.value = fmtCardNumber(fCardNumber.value); });
 fCardExpiry.addEventListener('input', () => { fCardExpiry.value = fmtCardExpiry(fCardExpiry.value); });
 fCardCvv.addEventListener('input', () => { fCardCvv.value = fCardCvv.value.replace(/\D/g, '').slice(0, 4); });
 
-const dlgSshPub = $dialog('#dlg-ssh-pub');
-function confirmSshPubOnly(): Promise<boolean> {
-  dlgSshPub.returnValue = '';
-  dlgSshPub.showModal();
-  $('#btn-ssh-pub-cancel').focus();
-  return new Promise((resolve) => dlgSshPub.addEventListener('close', () => resolve(dlgSshPub.returnValue === 'ok'), { once: true }));
-}
-$('#btn-ssh-pub-cancel').addEventListener('click', () => dlgSshPub.close());
-$('#btn-ssh-pub-save').addEventListener('click', () => dlgSshPub.close('ok'));
+const confirmSshPubOnly = (): Promise<boolean> =>
+  confirm({ title: t('sshpub.title'), body: rich(t('sshpub.body')), okLabel: t('sshpub.save'), cancelLabel: t('common.cancel') });
 
 // Generating or importing another key on an item that already has one: on save, the previous one is lost.
-const dlgSshOverwrite = $dialog('#dlg-ssh-overwrite');
 let sshOverwriteOk = false;
-function confirmSshOverwrite(action: 'generate' | 'import'): Promise<boolean> {
-  if (sshOverwriteOk || !state.editing?.sshPublicKey) return Promise.resolve(true);
+async function confirmSshOverwrite(action: 'generate' | 'import'): Promise<boolean> {
+  if (sshOverwriteOk || !state.editing?.sshPublicKey) return true;
   const gen = action === 'generate';
-  $('#ssh-overwrite-title').textContent = t(gen ? 'sshover.titleGen' : 'sshover.titleImport');
-  $('#ssh-overwrite-text').textContent = t(gen ? 'sshover.textGen' : 'sshover.textImport');
-  $('#btn-ssh-overwrite-ok').textContent = t(gen ? 'ssh.regen' : 'ssh.chooseFile');
-  dlgSshOverwrite.returnValue = '';
-  dlgSshOverwrite.showModal();
-  $('#btn-ssh-overwrite-cancel').focus();
-  return new Promise((resolve) => dlgSshOverwrite.addEventListener('close', () => {
-    sshOverwriteOk = dlgSshOverwrite.returnValue === 'ok';
-    resolve(sshOverwriteOk);
-  }, { once: true }));
+  sshOverwriteOk = await confirm({
+    title: t(gen ? 'sshover.titleGen' : 'sshover.titleImport'),
+    body: t(gen ? 'sshover.textGen' : 'sshover.textImport'),
+    okLabel: t(gen ? 'ssh.regen' : 'ssh.chooseFile'),
+    cancelLabel: t('common.cancel'),
+  });
+  return sshOverwriteOk;
 }
-$('#btn-ssh-overwrite-cancel').addEventListener('click', () => dlgSshOverwrite.close());
-$('#btn-ssh-overwrite-ok').addEventListener('click', () => dlgSshOverwrite.close('ok'));
 
 // SSH key in the editor: generating/importing runs on the server; the key fields are read-only.
 const paintSectionTitles = (): void => queryAll(form, '.ssh-only [data-icon]', HTMLElement).forEach((n) => n.replaceChildren(icon(iconNameOf(n)), ...rich(t(data(n, 'titleKey')))));
 let sshBusy = false;
 
-function sshPaintReveal(): void {
-  const shown = !isMasked(fSshPrivateKey);
-  const b = $('#ssh-reveal');
-  b.replaceChildren(icon(shown ? 'eye-off' : 'eye'));
-  b.setAttribute('aria-label', t(shown ? 'reveal.privateKey.hide' : 'reveal.privateKey.show'));
-}
 function sshPaintPreview(): void {
   const base = fSshPublicKey.dataset['base'];
   fSshPublicKey.value = base ? sshPubLine(base, fSshTitle.value.trim()) : '';
@@ -1396,10 +1244,6 @@ sshFile.addEventListener('change', async () => {
   sshPaste.value = await file.text();
   sshImport();
 });
-$('#ssh-reveal').addEventListener('click', () => {
-  setMasked(fSshPrivateKey, !isMasked(fSshPrivateKey));
-  sshPaintReveal();
-});
 queryAll(form, '[data-ssh-copy]', HTMLButtonElement).forEach((b) => {
   b.replaceChildren(icon('copy'));
   b.addEventListener('click', () => {
@@ -1418,34 +1262,24 @@ const SECRET_PLACEHOLDERS = {
   cardNumber: ['•••• •••• •••• ••••', '1234 5678 9012 3456'],
   cardCvv: ['•••', '0123'],
 } as const;
-function paintPlaceholder(input: HTMLInputElement): void {
-  const [hidden, visible] = SECRET_PLACEHOLDERS[oneOf(input.name, ['password', 'cardNumber', 'cardCvv'] as const, 'secret field name')];
-  input.placeholder = isMasked(input) ? hidden : visible;
-}
 
-// Show/hide buttons for the card's secret fields.
-function paintReveal(btn: HTMLButtonElement): void {
-  const input = fieldInput(data(btn, 'reveal'));
-  const shown = !isMasked(input);
-  paintPlaceholder(input);
-  btn.replaceChildren(icon(shown ? 'eye-off' : 'eye'));
-  btn.setAttribute('aria-label', t(`reveal.${btn.dataset['reveal'] === 'cardCvv' ? 'cvv' : 'cardNumber'}.${shown ? 'hide' : 'show'}`));
-}
-queryAll(form, '[data-reveal]', HTMLButtonElement).forEach((btn) => {
-  paintReveal(btn);
-  btn.addEventListener('click', () => {
-    const input = fieldInput(data(btn, 'reveal'));
-    setMasked(input, !isMasked(input));
-    paintReveal(btn);
-  });
-});
-
-function syncEye(): void {
-  const shown = !isMasked(fPassword);
-  paintPlaceholder(fPassword);
-  query(document, '#edit-eye-slash', SVGElement).style.display = shown ? '' : 'none';
-  $('#edit-toggle').setAttribute('aria-label', t(shown ? 'password.hide' : 'password.show'));
-}
+// One eye per secret field of the editor (the SSH private key, the login password, the card number and CVV).
+const passwordToggle = createRevealToggle({ input: fPassword, button: $button('#edit-toggle'), label: (shown) => t(shown ? 'password.hide' : 'password.show'), eyeOff: 'eye-off-wide', iconOptions: { size: 16, strokeWidth: 2 }, placeholders: SECRET_PLACEHOLDERS.password });
+const revealToggles: readonly RevealToggle[] = [
+  passwordToggle,
+  ...queryAll(form, '[data-reveal]', HTMLButtonElement).map((button) => {
+    const name = oneOf(data(button, 'reveal'), ['cardNumber', 'cardCvv'] as const, 'data-reveal');
+    return createRevealToggle({
+      input: fieldInput(name),
+      button,
+      label: (shown) => t(`reveal.${name === 'cardCvv' ? 'cvv' : 'cardNumber'}.${shown ? 'hide' : 'show'}`),
+      placeholders: SECRET_PLACEHOLDERS[name],
+    });
+  }),
+  createRevealToggle({ input: fSshPrivateKey, button: $button('#ssh-reveal'), label: (shown) => t(shown ? 'reveal.privateKey.hide' : 'reveal.privateKey.show') }),
+];
+// A secret is never left showing from a previous item: opening the editor puts every one back to hidden (S3).
+const resetSecrets = (): void => { for (const toggle of revealToggles) toggle.setShown(false); };
 
 function openEditor(item: VaultItem | null): void {
   clearFieldErrors();
@@ -1456,19 +1290,14 @@ function openEditor(item: VaultItem | null): void {
   paintEditTitle(item);
   $('#btn-delete').hidden = !item;
   fSshPublicKey.dataset['base'] = '';
-  setMasked(fSshPrivateKey, true);
-  sshPaintReveal();
+  resetSecrets();
   setType(item?.type || 'login');
   fName.value = item?.name || '';
   fUsername.value = item?.username || '';
   fPassword.value = item?.password || '';
-  setMasked(fPassword, true);
-  syncEye();
   fUris.value = item?.uris?.[0] || '';
   setFolderValue(item?.folder || (state.folder || ''));
-  closeFolderMenu();
-  for (const input of [fCardNumber, fCardCvv]) setMasked(input, true);
-  queryAll(form, '[data-reveal]', HTMLButtonElement).forEach(paintReveal);
+  folderMenuHandle.close();
   fCardholder.value = item?.cardholder || '';
   fCardNumber.value = item?.cardNumber || '';
   fCardExpiry.value = item?.cardExpiry || '';
@@ -1491,91 +1320,14 @@ function openEditor(item: VaultItem | null): void {
 $('#btn-new').addEventListener('click', () => { state.selectedId = null; renderList(); openEditor(null); });
 $('#btn-edit').addEventListener('click', () => openEditor(state.current));
 $('#btn-cancel').addEventListener('click', () => (state.current && state.selectedId ? renderView() : showDetail(null)));
-$('#edit-toggle').addEventListener('click', () => {
-  setMasked(fPassword, !isMasked(fPassword));
-  syncEye();
-});
 fPassword.addEventListener('input', () => paintMeter($('#edit-meter'), fPassword.value));
 $('#edit-generate').addEventListener('click', () => openGenerator((pw) => {
   fPassword.value = pw;
-  setMasked(fPassword, false);
-  syncEye();
+  passwordToggle.setShown(true);
   paintMeter($('#edit-meter'), pw);
 }));
 
-// Validation of fields with a defined format. An empty field is always accepted (only Name is required).
-const onlyDigits = (v: string): string => v.replace(/\D/g, '');
-const exactDigits = (n: number, labelKey: string) => (v: string): string => (onlyDigits(v).length === n ? '' : t('val.digits', { label: t(labelKey), n }));
-const luhn = (num: string): boolean => {
-  let sum = 0;
-  [...num].reverse().forEach((ch, k) => { let d = Number(ch); if (k % 2) { d *= 2; if (d > 9) d -= 9; } sum += d; });
-  return sum % 10 === 0;
-};
-// Check digits for CPF/CNPJ (Brazilian taxpayer IDs); repeated sequences (111.111.111-11) are invalid.
-const checkDigit = (nums: readonly number[], weights: readonly number[]): number => {
-  const r = nums.reduce((acc, n, k) => acc + n * at(weights, k), 0) % 11;
-  return r < 2 ? 0 : 11 - r;
-};
-const validCpf = (d: string): boolean => {
-  if (/^(\d)\1+$/.test(d)) return false;
-  const n = [...d].map(Number);
-  return checkDigit(n.slice(0, 9), [10, 9, 8, 7, 6, 5, 4, 3, 2]) === n[9] && checkDigit(n.slice(0, 10), [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]) === n[10];
-};
-const validCnpj = (d: string): boolean => {
-  if (/^(\d)\1+$/.test(d)) return false;
-  const n = [...d].map(Number);
-  return checkDigit(n.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === n[12] && checkDigit(n.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === n[13];
-};
-type ValidatedField = 'uris' | 'cardNumber' | 'cardExpiry' | 'cardCvv' | 'email' | 'birthDate' | 'phone' | 'cpf' | 'cnpj' | 'pis' | 'cnh' | 'zip' | 'sshHost' | 'sshPort';
-const FIELD_VALIDATORS: Readonly<Record<ValidatedField, (v: string) => string>> = {
-  uris: (v) => {
-    const site = v.trim();
-    if (/\s/.test(site)) return t('val.noSpaces');
-    try {
-      const u = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(site) ? site : `https://${site}`);
-      const h = u.hostname;
-      return h === 'localhost' || /^[\d.]+$/.test(h) || /^\[.*\]$/.test(h) || /^[^.]+(\.[^.]+)+$/.test(h) ? '' : t('val.website');
-    } catch { return t('val.website'); }
-  },
-  cardNumber: (v) => {
-    const d = onlyDigits(v);
-    if (d.length < 13 || d.length > 16) return t('val.cardIncomplete');
-    return luhn(d) ? '' : t('val.cardInvalid');
-  },
-  cardExpiry: (v) => {
-    const m = /^(\d{2})\/(\d{4})$/.exec(v);
-    if (!m) return t('val.expiryIncomplete');
-    return Number(m[1]) >= 1 && Number(m[1]) <= 12 ? '' : t('val.expiryMonth');
-  },
-  cardCvv: (v) => (/^\d{3,4}$/.test(v) ? '' : t('val.cvv')),
-  email: (v) => (v.length <= 254 && /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(v) ? '' : t('val.email')),
-  birthDate: (v) => {
-    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
-    if (!m) return t('val.dateIncomplete');
-    const [d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3])] as const;
-    const dt = new Date(y, mo - 1, d);
-    return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d ? '' : t('val.dateInvalid');
-  },
-  phone: (v) => {
-    const n = onlyDigits(v).length;
-    return n === 10 || n === 11 ? '' : t('val.phone');
-  },
-  cpf: (v) => {
-    const d = onlyDigits(v);
-    if (d.length !== 11) return t('val.cpfIncomplete');
-    return validCpf(d) ? '' : t('val.cpfInvalid');
-  },
-  cnpj: (v) => {
-    const d = onlyDigits(v);
-    if (d.length !== 14) return t('val.cnpjIncomplete');
-    return validCnpj(d) ? '' : t('val.cnpjInvalid');
-  },
-  pis: exactDigits(11, 'field.pis'),
-  cnh: exactDigits(11, 'field.cnh'),
-  zip: exactDigits(8, 'field.zip'),
-  sshHost: (v) => (/^[^\s@/]+$/.test(v.trim()) ? '' : t('val.host')),
-  sshPort: (v) => (Number(v) >= 1 && Number(v) <= 65535 ? '' : t('val.port')),
-};
+// Validation of fields with a defined format (ui/validators.ts). An empty field is always accepted (only Name is required).
 // Fields validated for each item type (those of other types are hidden and don't count).
 const VALIDATED_BY_TYPE: Readonly<Record<ItemType, readonly ValidatedField[]>> = {
   login: ['uris'],
@@ -1603,13 +1355,16 @@ function validateForm(): boolean {
   for (const name of (isItemType(type) ? VALIDATED_BY_TYPE[type] : [])) {
     const input = fieldInput(name);
     const value = input.value;
-    const msg = value ? FIELD_VALIDATORS[name](value) : '';
+    const msg = value ? FIELD_VALIDATORS[name](value, t) : '';
     setFieldError(input, msg);
     if (msg && !first) first = input;
   }
   $('#edit-error').textContent = '';
   if (first) {
-    if (isMasked(first)) { setMasked(first, false); queryAll(form, '[data-reveal]', HTMLButtonElement).forEach(paintReveal); }
+    if (isMasked(first)) {
+      const toggle = revealToggles.find((candidate) => candidate.input === first);
+      if (toggle) toggle.setShown(true); else setMasked(first, false);
+    }
     first.focus();
   }
   return !first;
@@ -1949,7 +1704,6 @@ $('#btn-restore').addEventListener('click', async () => {
 
 // ---------- Security settings ----------
 const dlgPassword = $dialog('#dlg-password');
-const dlgShutdown = $dialog('#dlg-shutdown');
 const dlgDestroy = $dialog('#dlg-destroy');
 const pwMsg = statusLine($('#pw-msg'));
 const secBtn = $button('#btn-security');
@@ -1962,29 +1716,22 @@ const placeSecMenu = (): void => {
   secItems.style.top = 'auto';
   secItems.style.bottom = `${(window.innerHeight - r.bottom) / z}px`;
 };
-window.addEventListener('resize', () => { if (!secItems.hidden) placeSecMenu(); });
-const setSecMenu = (open: boolean): void => { if (open) { secItems.hidden = false; placeSecMenu(); } secItems.hidden = !open; secBtn.setAttribute('aria-expanded', String(open)); };
-secBtn.addEventListener('click', () => {
-  setSecMenu(Boolean(secItems.hidden));
-  if (!secItems.hidden) expectInstance(secItems.querySelector('[role=menuitem]'), HTMLElement, '[role=menuitem] of the security menu').focus();
-});
-document.addEventListener('click', (e) => { if (!containsTarget($('#security-menu'), e.target)) setSecMenu(false); });
-$('#security-menu').addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { setSecMenu(false); secBtn.focus(); }
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    const items = queryAll(secItems, '[role=menuitem]', HTMLElement);
-    const i = items.findIndex((item) => item === document.activeElement);
-    if (secItems.hidden || i < 0) return;
-    e.preventDefault();
-    at(items, (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length).focus();
-  }
-});
-secItems.addEventListener('click', (e) => { if (e.target instanceof HTMLAnchorElement) setSecMenu(false); });
-$('#btn-open-pw').addEventListener('click', () => { setSecMenu(false); pwMsg(''); dlgPassword.showModal(); });
+// The Esc of this menu is not stopped: it still reaches the page (as it always has).
+const secMenu = createMenu({ trigger: secBtn, menu: secItems, itemSelector: '[role=menuitem]', place: placeSecMenu, onResize: 'place', keyScope: $('#security-menu'), stopEscape: false });
+secItems.addEventListener('click', (e) => { if (e.target instanceof HTMLAnchorElement) secMenu.close(); });
+$('#btn-open-pw').addEventListener('click', () => { secMenu.close(); pwMsg(''); dlgPassword.showModal(); });
 $('#btn-pw-close').addEventListener('click', () => dlgPassword.close());
-$('#btn-open-shutdown').addEventListener('click', () => { setSecMenu(false); dlgShutdown.showModal(); });
+$('#btn-open-shutdown').addEventListener('click', async () => {
+  secMenu.close();
+  if (!await confirm({ title: t('quit.title'), body: rich(t('quit.body')), okLabel: t('quit.confirm'), cancelLabel: t('common.cancel') })) return;
+  await api('POST /api/shutdown', { guard: guardShutdownAck }).catch(() => {});
+  document.body.replaceChildren(el('main', { className: 'screen center' },
+    el('div', { className: 'card auth' }, el('h1', { textContent: t('quit.doneTitle') }),
+      el('p', { className: 'muted' }))));
+  setRich(query(document, 'main p', HTMLElement), 'quit.doneBody', 'npx nullbrand');
+});
 $('#btn-open-destroy').addEventListener('click', () => {
-  setSecMenu(false);
+  secMenu.close();
   setRich($('#destroy-text'), 'destroy.body', state.status?.vaultPath || '');
   $input('#destroy-confirm').value = '';
   $('#destroy-msg').textContent = '';
@@ -2010,7 +1757,6 @@ $('#btn-destroy').addEventListener('click', async () => {
   showScreen('setup');
   toast(t('destroy.doneHint'), 9000);
 });
-$('#btn-shutdown-cancel').addEventListener('click', () => dlgShutdown.close());
 
 $('#btn-change-pw').addEventListener('click', async () => {
   const next = $input('#pw-next').value;
@@ -2024,15 +1770,6 @@ $('#btn-change-pw').addEventListener('click', async () => {
   } catch (ex) {
     pwMsg(msgOf(ex));
   }
-});
-
-$('#btn-shutdown').addEventListener('click', async () => {
-  await api('POST /api/shutdown', { guard: guardShutdownAck }).catch(() => {});
-  dlgShutdown.close();
-  document.body.replaceChildren(el('main', { className: 'screen center' },
-    el('div', { className: 'card auth' }, el('h1', { textContent: t('quit.doneTitle') }),
-      el('p', { className: 'muted' }))));
-  setRich(query(document, 'main p', HTMLElement), 'quit.doneBody', 'npx nullbrand');
 });
 
 // Auto-lock: the server locks; here we only check when returning to the tab.

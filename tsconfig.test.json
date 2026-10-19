@@ -10,6 +10,6 @@
   },
   // The DOM-free helpers of the web UI are compiled here too (lib ES2022, no DOM) so the Node runner can test them; the browser build
   // of the same files is the one in tsconfig.web.json.
-  "include": ["test/**/*.ts", "test/types/**/*.d.ts", "src/types/node/**/*.d.ts", "src/web/ui/url.ts", "src/web/ui/strength.ts", "src/web/ui/busy.ts"],
+  "include": ["test/**/*.ts", "test/types/**/*.d.ts", "src/types/node/**/*.d.ts", "src/web/ui/url.ts", "src/web/ui/strength.ts", "src/web/ui/busy.ts", "src/web/ui/step.ts", "src/web/ui/masks.ts", "src/web/ui/validators.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

@@ -3,9 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { at } from './support.js';
 import { hostOf, isHttpUrl, normalizeUrl, siteDomain } from '../src/web/ui/url.js';
 import { levelOf, strength, strengthLevel } from '../src/web/ui/strength.js';
 import { withBusy } from '../src/web/ui/busy.js';
+import { step } from '../src/web/ui/step.js';
 import type { BusyButton } from '../src/web/ui/busy.js';
 
 test('url: normalizeUrl adds https:// only when there is no scheme', () => {
@@ -110,4 +112,28 @@ test('masked inputs: the HTML only says type="text" data-masked; the autofill at
   const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   const firstStatement = app.split('\n').find((l) => l.trim() !== '' && !l.startsWith('import ') && !l.startsWith('//'));
   assert.equal(firstStatement, 'applySecretInputs(document);');
+});
+
+test('icons: the HTML draws none inline (only the language flags), and every slot names a known icon', () => {
+  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const inline = [...html.matchAll(/<svg\b[^>]*>/g)].map((m) => m[0]);
+  assert.equal(inline.length, 2, 'the two language flags');
+  for (const svg of inline) assert.match(svg, /viewBox="0 0 60 40"/);
+  const js = readFileSync(new URL('../public/ui/icons.js', import.meta.url), 'utf8');
+  const table = js.slice(js.indexOf('const ICONS = {'), js.indexOf('} as const') > 0 ? js.indexOf('};', js.indexOf('const ICONS = {')) : undefined);
+  const known = new Set([...table.matchAll(/^\s+(?:'([\w-]+)'|(\w+)):\s*\[/gm)].map((m) => m[1] ?? m[2]));
+  const slots = [...html.matchAll(/data-icon-slot="([\w-]+)"/g)].map((m) => at(m, 1));
+  assert.ok(slots.length >= 15, `slots found: ${slots.length}`);
+  for (const name of slots) assert.ok(known.has(name), `unknown icon in the HTML: ${name}`);
+});
+
+test('step: ArrowDown / ArrowUp wrap around the ends of the menu', () => {
+  assert.equal(step(4, 0, 1), 1);
+  assert.equal(step(4, 3, 1), 0, 'down from the last goes to the first');
+  assert.equal(step(4, 0, -1), 3, 'up from the first goes to the last');
+  assert.equal(step(4, 2, -1), 1);
+  assert.equal(step(1, 0, 1), 0);
+  assert.equal(step(1, 0, -1), 0);
+  assert.equal(step(3, -1, 1), 0, 'nothing focused yet: down lands on the first');
+  assert.equal(step(3, -1, -1), 2, 'nothing focused yet: up lands on the last');
 });
