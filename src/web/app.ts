@@ -1,13 +1,11 @@
 // nullbrand front-end. Vanilla TypeScript, no dependencies.
 // User data is always inserted with textContent (never innerHTML).
-import { createT, resolveLang, normalizeLang, fmtDate as fmtDateIntl, fmtRelative, errText, FALLBACK } from './i18n.js';
-import type { Dict, Lang, Translator, TranslateParams } from './i18n.js';
-import type { ApiResponses, ApiRoute, ApiWarning, GenerateRequest, ImportPreviewResponse, PublicItem, StatusResponse } from './api.js';
+import { resolveLang, normalizeLang, errText } from './i18n.js';
+import type { Lang } from './i18n.js';
+import type { ApiWarning, GenerateRequest, ImportPreviewResponse, PublicItem, StatusResponse } from './api.js';
 import {
-  guardClipboardCopyResponse,
   guardConfigResponse,
   guardCountResponse,
-  guardDict,
   guardExportResponse,
   guardFolderDeleteResponse,
   guardFolderList,
@@ -24,11 +22,15 @@ import {
   isApiErrorResponse,
   isImportPreviewResponse,
 } from './api-guards.js';
-import type { Guard } from './api-guards.js';
-import { errorMessage } from './guards.js';
+import { api, ApiError, ApiResponseError, msgOf, setSessionScreenHandler } from './http.js';
+import { readJson } from './json.js';
+import { applyI18n, fmtDate, fmtRelativeTime, loadDicts, lc, rich, setLocale, setRich, t } from './locale.js';
+import { toast, toastError, toastIfInvalidResponse } from './toast.js';
+import { copy } from './clipboard.js';
+import { screenShowing, showDetail, showScreen } from './shell.js';
 import { isItemType } from './vault-types.js';
 import type { IdentityKey, ItemType, VaultItem } from './vault-types.js';
-import { $, $button, $dialog, $form, $input, $textarea, DomError, DomValueError, at, data, dataOneOf, el, expectInstance, firstFile, oneOf, query, queryAll, textOf, tx } from './dom.js';
+import { $, $button, $dialog, $form, $input, $textarea, DomValueError, at, data, dataOneOf, el, expectInstance, firstFile, oneOf, query, queryAll, textOf, tx } from './dom.js';
 import { currentItem, state } from './state.js';
 import { strengthLevel } from './ui/strength.js';
 import { hostOf, isHttpUrl, normalizeUrl, siteDomain } from './ui/url.js';
@@ -48,196 +50,7 @@ import type { IconName } from './ui/icons.js';
 // Before anything can be shown or focused: every masked input gets its autofill/IME attributes (S6).
 applySecretInputs(document);
 applyIcons(document);
-
-// ---------- i18n ----------
-// Dictionaries come from /locales/<lang>.json (same files as the CLI). `t` is replaced on language change.
-const dicts: Record<string, Dict | undefined> = {};
-let lang: Lang = FALLBACK;
-let t: Translator = createT(lang, dicts);
-const lc = (label: string): string => (label === label.toUpperCase() ? label : label.toLowerCase());
-
-// A response that does not have the shape the UI expects. Nothing is rendered from it: the screen stays as it was.
-// `route` and `reason` (field names only, never values) go to the console; the message is the translated, visible one.
-class ApiResponseError extends Error {
-  readonly route: string;
-  readonly reason: string;
-  constructor(route: string, reason: string) {
-    super(t('err.http.invalidResponse'));
-    this.name = 'ApiResponseError';
-    this.route = route;
-    this.reason = reason;
-    console.error('nullbrand: invalid response from the local server', { route, reason });
-  }
-}
-
-const NOT_JSON = Symbol('not-json');
-async function readJson(res: Response): Promise<unknown> {
-  try {
-    const body: unknown = await res.json();
-    return body;
-  } catch {
-    return NOT_JSON;
-  }
-}
-
-async function loadDicts(): Promise<void> {
-  await Promise.all(['en', 'pt'].map(async (l) => {
-    try {
-      const res = await fetch(`/locales/${l}.json`);
-      if (res.ok) {
-        const body = await readJson(res);
-        const checked = body === NOT_JSON ? ({ ok: false, reason: 'dictionary: not valid JSON' } as const) : guardDict(body);
-        if (checked.ok) dicts[l] = checked.value;
-        else console.error('nullbrand: invalid response from the local server', { route: `GET /locales/${l}.json`, reason: checked.reason });
-      }
-    } catch {}
-  }));
-}
-
-// Replaces "{code}" in a translated string with a <code> element (no innerHTML).
-function setRich(node: HTMLElement, key: string, code: string, params: TranslateParams = {}): void {
-  const [before = '', after = ''] = t(key, { ...params, code: '\u0000' }).split('\u0000');
-  node.replaceChildren(before, el('code', { textContent: code }), after);
-}
-
-// Turns `backtick` spans of a translated string into <code> elements (no innerHTML).
-const rich = (text: string): (string | HTMLElement)[] => text.split('`').map((part, k) => (k % 2 ? el('code', { textContent: part }) : part)).filter((p) => p !== '');
-
-function applyI18n(root: ParentNode = document): void {
-  for (const n of queryAll(root, '[data-i18n]', HTMLElement)) {
-    if (n.dataset['i18nCode'] !== undefined) setRich(n, data(n, 'i18n'), data(n, 'i18nCode'));
-    else n.replaceChildren(...rich(t(data(n, 'i18n'))));
-  }
-  for (const n of queryAll(root, '[data-i18n-title]', HTMLElement)) n.title = t(data(n, 'i18nTitle'));
-  for (const n of queryAll(root, '[data-i18n-placeholder]', HTMLElement)) {
-    if (!(n instanceof HTMLInputElement || n instanceof HTMLTextAreaElement)) throw new DomError('[data-i18n-placeholder] on an element without a placeholder');
-    n.placeholder = t(data(n, 'i18nPlaceholder'));
-  }
-  for (const n of queryAll(root, '[data-i18n-aria]', HTMLElement)) n.setAttribute('aria-label', t(data(n, 'i18nAria')));
-  document.documentElement.lang = lang;
-  for (const b of queryAll(document, '.lang-switch [data-lang]', HTMLElement)) b.setAttribute('aria-pressed', String(b.dataset['lang'] === lang));
-}
-
-const fmtDate = (iso: string): string => fmtDateIntl(lang, iso);
-
-// ---------- Session ----------
-// The session lives in an HttpOnly cookie set by the server at /auth; JS never sees the token.
-
-// An error answer of the server (any non-2xx status): the message is already translated.
-class ApiError extends Error {
-  readonly status: number;
-  readonly key: string | undefined;
-  constructor(message: string, status: number, key: string | undefined) {
-    super(message);
-    this.status = status;
-    this.key = key;
-  }
-}
-
-// `route` is the "METHOD /path" key of ./api.ts; `path` is the real URL when the route has a `:id` in it. `guard` narrows the
-// body of a 2xx answer: if it does not pass, nothing is returned (ApiResponseError). A non-2xx answer keeps working as it always
-// did: its body is only used to read message / key / params when it is a valid error body; otherwise the generic message.
-async function api<K extends ApiRoute>(route: K, { guard, body, path }: { guard: Guard<ApiResponses[K]>; body?: object; path?: string }): Promise<ApiResponses[K]> {
-  const [method = '', routePath = ''] = route.split(' ');
-  const res = await fetch(path ?? routePath, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : null,
-  });
-  const answer = await readJson(res);
-  const errorBody = isApiErrorResponse(answer) ? answer : undefined;
-  if (res.status === 401 && errorBody?.key === 'err.http.noSession') showScreen('nosession');
-  if (!res.ok) {
-    const key = errorBody?.key || (res.status === 423 ? 'err.http.locked' : undefined);
-    const message = !errorBody?.error && !key
-      ? t('err.http.generic', { status: res.status })
-      : errText(t, { key, params: errorBody?.params, message: errorBody?.error }) || t('err.http.generic', { status: res.status });
-    if (res.status === 423) showScreen('unlock');
-    throw new ApiError(message, res.status, key);
-  }
-  if (answer === NOT_JSON) throw new ApiResponseError(route, 'response: not valid JSON');
-  const checked = guard(answer);
-  if (!checked.ok) throw new ApiResponseError(route, checked.reason);
-  return checked.value;
-}
-
-// The message of a caught value, for textContent.
-const msgOf = (ex: unknown): string | null => errorMessage(ex) ?? null;
-
-type ScreenName = 'nosession' | 'setup' | 'unlock' | 'vault';
-let currentScreen: ScreenName | null = null; // null until the first screen is chosen (the page starts with all of them hidden)
-function showScreen(name: ScreenName): void {
-  currentScreen = name;
-  for (const s of ['nosession', 'setup', 'unlock', 'vault']) $(`#screen-${s}`).hidden = s !== name;
-  $('.lang-switch').hidden = name === 'vault'; // only while the vault is locked
-  if (name !== 'vault') { clipCountdown(0); $('#view-fields').replaceChildren(); $('#view-ssh-download').replaceChildren(); }
-  // These two dialogs hold a file full of passwords / the master password: closing them drops both (see their 'close' handlers).
-  if (name !== 'vault') for (const d of queryAll(document, '#dlg-import[open], #dlg-export[open]', HTMLDialogElement)) d.close();
-  if (name === 'nosession') { $('#nosession-info').hidden = false; $('#nosession-fail').hidden = true; }
-  if (name === 'unlock') { $input('#unlock-pass').value = ''; setTimeout(() => $input('#unlock-pass').focus(), 0); }
-  if (name === 'setup') setTimeout(() => $input('#setup-pass').focus(), 0);
-}
-
-// An ApiResponseError reaches the user as a toast (longer than the usual one: it is rare and must not go unnoticed).
-const INVALID_RESPONSE_TOAST_MS = 8000;
-const toastMs = (ex: unknown, ms: number): number => (ex instanceof ApiResponseError ? Math.max(ms, INVALID_RESPONSE_TOAST_MS) : ms);
-const toastError = (ex: unknown): void => toast(msgOf(ex), toastMs(ex, 2200));
-// For calls that used to have no catch (an error ended up as an unhandled rejection): only the new error is shown; any other is
-// thrown again, so it ends up exactly where it did before.
-function toastIfInvalidResponse(ex: unknown): void {
-  if (ex instanceof ApiResponseError) toastError(ex);
-  else throw ex;
-}
-
-let toastTimer: ReturnType<typeof setTimeout> | undefined;
-function toast(msg: string | null, ms = 2200): void {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (t.hidden = true), ms);
-}
-
-// Copying and clearing are done by the server (Node process), not by navigator.clipboard:
-// the browser may be unfocused when the timer fires. Here we only show the countdown.
-// `sensitive` = passwords, card numbers, private keys, 2FA secrets: the server clears them later.
-let clipTick: number | undefined;
-function clipChip(text: string | null): void {
-  const chip = $('#clip-chip');
-  chip.hidden = text == null;
-  if (text != null) chip.textContent = text;
-}
-function clipCountdown(seconds: number): void {
-  clearInterval(clipTick);
-  if (!seconds) return clipChip(null);
-  const end = Date.now() + seconds * 1000;
-  const paint = (): void => {
-    const left = Math.ceil((end - Date.now()) / 1000);
-    if (left <= 0) {
-      clearInterval(clipTick);
-      clipChip(t('clipboard.cleared'));
-      clipTick = setTimeout(() => clipChip(null), 2000);
-      return;
-    }
-    clipChip(t('clipboard.copied', { s: left }));
-  };
-  paint();
-  clipTick = setInterval(paint, 1000);
-}
-// `what`: translated name of the copied field (for the toast); sensitive copies show the countdown instead.
-async function copy(text: string, what: string, { sensitive = false }: { sensitive?: boolean } = {}): Promise<void> {
-  clearTimeout(clipTick);
-  try {
-    const r = await api('POST /api/clipboard/copy', { guard: guardClipboardCopyResponse, body: { text, sensitive } });
-    if (r.concealed === false) toast(t('clipboard.notConcealed'), 6000);
-    if (sensitive && r.seconds) return clipCountdown(r.seconds);
-    clipCountdown(0);
-    toast(what && !sensitive ? t('copied.field', { label: lc(what) }) : t('copied.generic'), 1500);
-  } catch (err) {
-    clipCountdown(0);
-    toast(msgOf(err) || t('copy.failed'), toastMs(err, 4000));
-  }
-}
+setSessionScreenHandler(showScreen);
 
 function paintMeter(span: HTMLElement, pw: string): void {
   const { bits, level } = strengthLevel(pw);
@@ -250,8 +63,7 @@ function paintMeter(span: HTMLElement, pw: string): void {
 // Switches without reloading: static text via data-i18n attributes, dynamic parts re-rendered.
 function setLang(next: Lang, { persist = false }: { persist?: boolean } = {}): void {
   if (!normalizeLang(next)) return;
-  lang = next;
-  t = createT(lang, dicts);
+  setLocale(next);
   applyI18n();
   paintSectionTitles();
   paintEditTitle(state.editing);
@@ -264,7 +76,7 @@ function setLang(next: Lang, { persist = false }: { persist?: boolean } = {}): v
     if (dlgGen.open) regen();
   }
   if (persist) {
-    api('PUT /api/config', { guard: guardConfigResponse, body: { lang } }).catch(() => {});
+    api('PUT /api/config', { guard: guardConfigResponse, body: { lang: next } }).catch(() => {});
   }
 }
 document.addEventListener('click', (e) => {
@@ -322,14 +134,14 @@ $button('#nosession-retry').addEventListener('click', async (e) => {
 // there, by the caller) instead of an empty vault that would look like the real one. Before the first screen there is none to go
 // back to, so the error screen of the boot takes its place.
 async function enterVault(): Promise<void> {
-  const before = currentScreen;
+  const before = screenShowing();
   showScreen('vault');
   try {
     await refresh();
   } catch (ex) {
     // Any failure of the first load leaves the vault screen: the caller's error element is on the previous screen.
     // A 401/423 has already sent api() to nosession/unlock, which stays.
-    if (currentScreen === 'vault') {
+    if (screenShowing() === 'vault') {
       if (before === null) showBootError();
       else showScreen(before);
     }
@@ -763,13 +575,6 @@ const searchInput = $input('#search');
 searchInput.addEventListener('input', () => { state.query = searchInput.value; renderList(); });
 
 // ---------- Detail ----------
-function showDetail(mode: 'view' | 'edit' | null): void {
-  $('#detail-empty').hidden = mode !== null;
-  $('#detail-view').hidden = mode !== 'view';
-  $('#detail-edit').hidden = mode !== 'edit';
-  $('#screen-vault').classList.toggle('show-detail', mode !== null);
-}
-
 // If the item does not come back valid, nothing is shown from it: the previous selection and detail stay as they were.
 async function select(id: string): Promise<void> {
   const previousId = state.selectedId;
@@ -934,7 +739,7 @@ function renderView(): void {
 
   const meta: HTMLElement[] = [];
   if (i.createdAt) meta.push(el('span', { textContent: t('meta.created', { date: fmtDate(i.createdAt) }) }));
-  if (i.updatedAt) meta.push(el('span', { textContent: t('meta.edited', { when: fmtRelative(lang, i.updatedAt) }), title: fmtDate(i.updatedAt) }));
+  if (i.updatedAt) meta.push(el('span', { textContent: t('meta.edited', { when: fmtRelativeTime(i.updatedAt) }), title: fmtDate(i.updatedAt) }));
   $('#view-meta').replaceChildren(...meta);
   showDetail('view');
 }
@@ -1252,7 +1057,7 @@ queryAll(form, '[data-ssh-copy]', HTMLButtonElement).forEach((b) => {
     if (v) copy(v, { public: t('ssh.public'), fingerprint: t('ssh.fingerprint'), private: t('ssh.private') }[which], { sensitive: which === 'private' });
   });
 });
-$('#ssh-copy-config').addEventListener('click', () => copy(textOf($('#ssh-config')), 'config'));
+$('#ssh-copy-config').addEventListener('click', () => copy(textOf($('#ssh-config')), 'config', { sensitive: false }));
 for (const input of [fName, fSshTitle, fSshHost, fSshUser]) input.addEventListener('input', sshPaintPreview);
 fSshPort.addEventListener('input', () => { fSshPort.value = fSshPort.value.replace(/\D/g, '').slice(0, 5); sshPaintPreview(); });
 
