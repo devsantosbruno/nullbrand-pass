@@ -1,5 +1,4 @@
 :root {
-  /* graphite scale (cool bias) */
   --g-0: #ffffff;
   --g-50: #f7f8f9;
   --g-100: #eff0f2;
@@ -13,12 +12,11 @@
   --g-900: #141517;
   --g-950: #0b0c0d;
 
-  /* functional: state only, never decoration */
   --ok: #7fae93;
   --warn: #c9a866;
   --err: #d08a83;
 
-  /* roles · dark is the default */
+  /* Roles; dark is the default. */
   --bg: var(--g-950);
   --panel: var(--g-900);
   --panel-2: var(--g-800);
@@ -26,7 +24,8 @@
   --line-strong: var(--g-700);
   --text: var(--g-100);
   --muted: var(--g-400);
-  --accent: var(--g-50); /* accent = full inversion of the background */
+  /* The accent is the exact inversion of the background. */
+  --accent: var(--g-50);
   --accent-ink: var(--g-950);
   --accent-soft: var(--g-800);
   --danger: var(--err);
@@ -60,7 +59,7 @@
 :root {
   --z: 1;
 }
-/* Large screens: scales the whole interface proportionally */
+/* --z scales the whole interface (applied as CSS zoom) on large screens. */
 @media (min-width: 1680px) {
   :root {
     --z: 1.2;
@@ -112,7 +111,7 @@ code,
 .mono {
   font-family: var(--mono);
 }
-/* Inline code: terminal-like chip. Never breaks inside; long values scroll instead. */
+/* Inline code never wraps inside; long values scroll instead. */
 code {
   display: inline-block;
   max-width: 100%;
@@ -170,7 +169,6 @@ textarea[aria-invalid='true'] {
   color: var(--ok);
 }
 
-/* Brand: the command is the identity, no symbol */
 .brand {
   display: flex;
   align-items: baseline;
@@ -208,7 +206,6 @@ textarea[aria-invalid='true'] {
   color: var(--line-strong);
 }
 
-/* Forms */
 label {
   display: grid;
   gap: 6px;
@@ -248,7 +245,6 @@ input[type="radio"] {
   width: auto;
   accent-color: var(--accent);
 }
-/* checkbox in shadcn/ui style */
 input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
@@ -397,7 +393,6 @@ input[type="file"] {
     background 0.2s;
 }
 
-/* Authentication screens */
 .screen.center {
   min-height: 100%;
   display: grid;
@@ -422,7 +417,6 @@ input[type="file"] {
   padding: 11px;
 }
 
-/* App layout */
 .app {
   display: grid;
   grid-template-columns: 230px var(--list-w, 360px) 1fr;
@@ -975,7 +969,6 @@ input[type="file"] {
   flex-wrap: wrap;
 }
 
-/* Dialogs */
 dialog {
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1075,7 +1068,6 @@ dialog::backdrop {
   z-index: 9;
 }
 
-/* Responsive */
 @media (max-width: 900px) {
   .sidebar-toggle {
     display: none;
@@ -1164,7 +1156,6 @@ dialog::backdrop {
   width: 80px;
 }
 
-/* Select (folder) */
 .field {
   display: grid;
   gap: 6px;
@@ -1261,7 +1252,6 @@ dialog::backdrop {
   min-width: 0;
 }
 
-/* ---------- Item detail pane ---------- */
 #detail-view {
   --fg: var(--text);
   --fg-2: var(--g-300);
@@ -1486,7 +1476,6 @@ dialog::backdrop {
   color: var(--fg-3);
 }
 
-/* ---------- Bulk selection ---------- */
 .item .check {
   flex: none;
   margin: 0;
@@ -1606,7 +1595,6 @@ dialog::backdrop {
   }
 }
 
-/* Resize handle (list | detail) */
 .resize-handle {
   display: none;
 }
@@ -1648,8 +1636,7 @@ dialog::backdrop {
   align-items: start;
 }
 
-/* Identity — spacing: title 14px + 12px to the field; fields 12px apart
-   (label margin-top); sections separated by a divider with 24px above and below. */
+/* Identity and SSH spacing: title 14px, then 12px to the field; fields 12px apart (label margin-top); sections divided by a rule with 24px above and below. */
 .identity-only .section-title,
 .ssh-only .section-title,
 .dv-section {
@@ -1675,7 +1662,7 @@ dialog::backdrop {
   border: 0;
   border-top: 1px solid var(--line-strong);
 }
-/* the title already separates: the first field of the section gets no extra margin */
+/* The title already separates, so the first field gets no extra margin. */
 .identity-only .section-title + label,
 .ssh-only .section-title + label,
 .ssh-only .section-title + .row2 > label,
@@ -1695,7 +1682,6 @@ dialog::backdrop {
   padding-top: 0;
 }
 
-/* SSH key */
 .ssh-only .seg-row {
   display: flex;
   flex-wrap: wrap;
@@ -1777,7 +1763,6 @@ dialog::backdrop {
   line-height: 1.6;
 }
 
-/* Language switch: flags, fixed at the top-right corner of every screen */
 .lang-switch[hidden] { display: none; }
 .lang-switch {
   position: fixed;
@@ -1803,7 +1788,7 @@ dialog::backdrop {
 .lang-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; opacity: 1; }
 .lang-switch svg { display: block; border-radius: 3px; }
 
-/* Masked secret fields: type="text" + CSS masking so browsers never offer to save a password. */
+/* type="text" plus CSS masking, so browsers never offer to save the value as a password. */
 input[data-masked] {
   -webkit-text-security: disc;
 }
