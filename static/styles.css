@@ -705,7 +705,8 @@ input[type="file"] {
 .dropdown-menu[hidden] {
   display: none;
 }
-.dropdown-menu button {
+.dropdown-menu button,
+.dropdown-menu a {
   display: block;
   width: 100%;
   text-align: left;
@@ -718,9 +719,12 @@ input[type="file"] {
   padding: 7px 10px;
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: none;
 }
 .dropdown-menu button:hover,
-.dropdown-menu button:focus-visible {
+.dropdown-menu button:focus-visible,
+.dropdown-menu a:hover,
+.dropdown-menu a:focus-visible {
   background: var(--panel-2);
   outline: none;
 }

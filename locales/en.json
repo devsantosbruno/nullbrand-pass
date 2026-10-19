@@ -232,6 +232,7 @@
   "sidebar.toggle": "Toggle sidebar",
   "sidebar.toggleTitle": "Toggle sidebar (Ctrl/⌘+B)",
   "menu.changePassword": "Change master password",
+  "menu.report": "Report or contact",
   "menu.quit": "Shut down nullbrand",
   "menu.deleteVault": "Delete vault",
   "list.search": "Search vault",

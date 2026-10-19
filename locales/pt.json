@@ -232,6 +232,7 @@
   "sidebar.toggle": "Mostrar ou ocultar a barra lateral",
   "sidebar.toggleTitle": "Mostrar ou ocultar a barra lateral (Ctrl/⌘+B)",
   "menu.changePassword": "Trocar senha mestra",
+  "menu.report": "Reportar ou entrar em contato",
   "menu.quit": "Encerrar nullbrand",
   "menu.deleteVault": "Apagar cofre",
   "list.search": "Buscar no cofre",

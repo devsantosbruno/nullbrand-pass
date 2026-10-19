@@ -1971,6 +1971,7 @@ $('#security-menu').addEventListener('keydown', (e) => {
     at(items, (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length).focus();
   }
 });
+secItems.addEventListener('click', (e) => { if (e.target instanceof HTMLAnchorElement) setSecMenu(false); });
 $('#btn-open-pw').addEventListener('click', () => { setSecMenu(false); pwMsg(''); dlgPassword.showModal(); });
 $('#btn-pw-close').addEventListener('click', () => dlgPassword.close());
 $('#btn-open-shutdown').addEventListener('click', () => { setSecMenu(false); dlgShutdown.showModal(); });
