@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { checkSource, checkPackageJson, checkProject } from './check-no-escape.mjs';
+import { fileURLToPath } from 'node:url';
 
 const rules = (text, name = 'x.ts') => checkSource(name, text).violations.map((v) => v.rule);
 
@@ -149,7 +150,7 @@ test('src/web/: HTML sinks, eval and inline styles fail (and only there)', () =>
 });
 
 test('the front-end sources pass the web rules today', async () => {
-  const root = new URL('../', import.meta.url).pathname;
+  const root = fileURLToPath(new URL('../', import.meta.url));
   const { violations } = checkProject(root, { dirs: ['src/web'] });
   assert.deepEqual(violations, []);
 });

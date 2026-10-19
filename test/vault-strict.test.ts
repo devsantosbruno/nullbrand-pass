@@ -14,6 +14,7 @@ import { isObjectLike } from '../src/shared/guards.js';
 import { at, thrownKey, thrownMessage } from './support.js';
 import { planImport } from '../src/formats/index.js';
 import { isVaultItem } from '../src/shared/vault-types.js';
+import { fileURLToPath } from 'node:url';
 
 const PW = 'test-master-password';
 const tmp = () => fs.mkdtemp(join(tmpdir(), 'nb-strict-'));
@@ -48,7 +49,7 @@ async function vaultWith(dir: string, content: unknown) {
 }
 
 test('every item of the fixtures satisfies the VaultItem union (all five types)', async () => {
-  const v = await Vault.unlock(FIX_PW, new URL('legacy-vault.json', FIX).pathname, { migrate: false });
+  const v = await Vault.unlock(FIX_PW, fileURLToPath(new URL('legacy-vault.json', FIX)), { migrate: false });
   assert.deepEqual(v.items.map((i) => i.type).sort(), ['card', 'identity', 'login', 'note', 'ssh']);
   for (const item of v.items) assert.ok(isVaultItem(item), item.type);
   v.key.fill(0);

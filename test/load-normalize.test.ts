@@ -9,6 +9,7 @@ import { deriveKey, encryptJson } from '../src/crypto.js';
 import type { KdfParams } from '../src/crypto.js';
 import { toMasterPassword } from '../src/brands.js';
 import { at, thrownKey, thrownMessage, thrownParams } from './support.js';
+import { fileURLToPath } from 'node:url';
 
 const FIX = new URL('./fixtures/', import.meta.url);
 const FIX_PW = 'fixture-master-password-ñ-123';
@@ -30,7 +31,7 @@ for (const name of ['legacy-vault.json', 'legacy-backup.json']) {
     const file = new URL(name, FIX);
     const original = await readBackupItemsFromText(await fs.readFile(file, 'utf8'), FIX_PW);
     assert.deepEqual(original.map((i) => i.type).sort(), ['card', 'identity', 'login', 'note', 'ssh']);
-    const v = await Vault.unlock(FIX_PW, file.pathname, { migrate: false });
+    const v = await Vault.unlock(FIX_PW, fileURLToPath(file), { migrate: false });
     assert.deepEqual(v.items, original);
     v.key.fill(0);
   });

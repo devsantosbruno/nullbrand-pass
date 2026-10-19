@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import type { RunningServer } from '../src/server.js';
 import { startServer } from '../src/server.js';
 import { header, jsonRecord, present } from './support.js';
+import { fileURLToPath } from 'node:url';
 
 interface Ctx {
   srv: RunningServer;
@@ -16,7 +17,7 @@ interface Ctx {
   call: (method: string, path: string, body?: string, extra?: Record<string, string>) => Promise<Response>;
 }
 
-const BIN = new URL('../bin/nullbrand.js', import.meta.url).pathname;
+const BIN = fileURLToPath(new URL('../bin/nullbrand.js', import.meta.url));
 
 async function withServer(fn: (ctx: Ctx) => Promise<void>) {
   const dir = await mkdtemp(join(tmpdir(), 'nb-srv5b-'));

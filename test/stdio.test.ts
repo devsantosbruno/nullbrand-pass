@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { guardStdio } from '../src/stdio.js';
 import type { ErrorSource } from '../src/stdio.js';
+import { fileURLToPath } from 'node:url';
 
-const BIN = new URL('../bin/nullbrand.js', import.meta.url).pathname;
+const BIN = fileURLToPath(new URL('../bin/nullbrand.js', import.meta.url));
 
 function pipeClosed(args: string, redirect: string) {
   const home = mkdtempSync(join(tmpdir(), 'nb-epipe-'));

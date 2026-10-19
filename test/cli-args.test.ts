@@ -4,8 +4,9 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const BIN = new URL('../bin/nullbrand.js', import.meta.url).pathname;
+const BIN = fileURLToPath(new URL('../bin/nullbrand.js', import.meta.url));
 
 function cli(args: string[], extraEnv: Record<string, string> = {}) {
   const home = mkdtempSync(join(tmpdir(), 'nb-args-'));

@@ -9,6 +9,7 @@ import { WrongPasswordError, decryptJson, deriveKey, encryptJson } from '../src/
 import type { EncryptedBox, KdfParams } from '../src/crypto.js';
 import { toMasterPassword } from '../src/brands.js';
 import { at, objectAt, parseJsonObject, thrownKey, writeV2Vault } from './support.js';
+import { fileURLToPath } from 'node:url';
 
 const PW = 'test-master-password';
 const FIX = new URL('./fixtures/', import.meta.url);
@@ -31,7 +32,7 @@ test('the fixtures carry 16-byte tags and still open unchanged', async () => {
     const file = parseJsonObject(readFileSync(new URL(name, FIX), 'utf8'));
     assert.equal(Buffer.from(String(objectAt(file, 'payload')['tag']), 'base64').length, 16, name);
   }
-  const vault = await Vault.unlock(FIX_PW, new URL('legacy-vault.json', FIX).pathname, { migrate: false });
+  const vault = await Vault.unlock(FIX_PW, fileURLToPath(new URL('legacy-vault.json', FIX)), { migrate: false });
   assert.ok(vault.items.length > 0);
   const items = await readBackupItemsFromText(readFileSync(new URL('legacy-backup.json', FIX), 'utf8'), FIX_PW);
   assert.ok(items.length > 0);
