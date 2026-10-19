@@ -120,3 +120,37 @@ test('project: .js/.mjs/.cjs in src/ fail, other directories may keep .js', asyn
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('src/web/: HTML sinks, eval and inline styles fail (and only there)', () => {
+  const web = (text) => rules(text, 'src/web/features/x.ts');
+  const bad = [
+    ['const n = document.body; n.innerHTML = "x";', 'web-html-sink'],
+    ['const s = n.outerHTML;', 'web-html-sink'],
+    ['n.insertAdjacentHTML("beforeend", s);', 'web-html-sink'],
+    ['const a = el("div", { innerHTML: s });', 'web-html-sink'],
+    ['n["innerHTML"] = s;', 'web-html-sink'],
+    ['document.write(s); document.writeln(s);', 'web-html-sink'],
+    ['eval(s);', 'web-eval'],
+    ['const f = new Function("return 1");', 'web-eval'],
+    ['setTimeout("run()", 10); setInterval(`x${1}`, 10);', 'web-eval'],
+    ['n.setAttribute("style", "color:red");', 'web-inline-style'],
+    ['n.setAttribute("STYLE", "color:red");', 'web-inline-style'],
+    ['n.style.cssText = "color:red";', 'web-inline-style'],
+  ];
+  for (const [code, rule] of bad) assert.ok(web(code).includes(rule), code);
+  // The same code is fine outside src/web/ (the Node side has no DOM), and the safe forms are fine inside.
+  for (const [code] of bad) assert.deepEqual(rules(code, 'src/server.ts').filter((r) => r.startsWith('web-')), [], code);
+  const good = [
+    'n.textContent = s; n.style.width = "3px"; n.style.setProperty("--w", "3px");',
+    'n.setAttribute("aria-label", s); n.setAttribute("role", "menu");',
+    'setTimeout(() => run(), 10); setInterval(run, 10);',
+    'const html = 1; const innerHTMLish = 2; const o = { textContent: s };',
+  ];
+  for (const code of good) assert.deepEqual(web(code), [], code);
+});
+
+test('the front-end sources pass the web rules today', async () => {
+  const root = new URL('../', import.meta.url).pathname;
+  const { violations } = checkProject(root, { dirs: ['src/web'] });
+  assert.deepEqual(violations, []);
+});

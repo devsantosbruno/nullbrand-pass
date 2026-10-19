@@ -8,6 +8,10 @@
 //   - non-null assertions (x!, x!.y, x![0])      - `@ts-` anywhere (also in comments: ignore / expect-error / nocheck)
 //   - the types `Function`, `Object` and `{}`    - JSON.parse(...) / .json() whose result is not assigned to a variable
 //                                                  annotated `: unknown`
+// and, only under src/web/ (the browser code; S1/S2 of the front-end spec):
+//   - innerHTML / outerHTML / insertAdjacentHTML / document.write / document.writeln   (user data must only reach textContent)
+//   - eval / new Function / Function(...) / a string passed to setTimeout or setInterval  (the CSP has no 'unsafe-eval')
+//   - setAttribute('style', ...) and .style.cssText / cssText:                           (the CSP has no inline styles)
 // and, project-wide:
 //   - any .js / .mjs / .cjs file under src/
 //   - any package in `dependencies` (or optional/peer), or in `devDependencies` other than `typescript`.
@@ -19,6 +23,17 @@ import { fileURLToPath } from 'node:url';
 
 const TS_FILE = /\.(ts|mts|cts)$/;
 const JS_FILE = /\.(js|mjs|cjs)$/;
+
+const WEB_FILE = /^src[\\/]web[\\/]/;
+const HTML_SINKS = new Set(['innerHTML', 'outerHTML', 'insertAdjacentHTML']);
+// The name of a property access / property assignment / element access with a string literal (`a.b`, `{ b: 1 }`, `a['b']`).
+function memberName(node) {
+  if (ts.isPropertyAccessExpression(node)) return node.name.text;
+  if (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) return ts.isIdentifier(node.name) || ts.isStringLiteral(node.name) ? node.name.text : null;
+  if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression)) return node.argumentExpression.text;
+  return null;
+}
+const isIdent = (node, name) => ts.isIdentifier(node) && node.text === name;
 
 const line = (sf, node) => sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
 
@@ -50,6 +65,27 @@ export function checkSource(fileName, text) {
   const isDeclarationFile = fileName.endsWith('.d.ts');
   const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
   const add = (node, rule, message) => violations.push({ file: fileName, line: line(sf, node), rule, message });
+  const isWeb = WEB_FILE.test(fileName);
+
+  function checkWebMember(node) {
+    const name = memberName(node);
+    if (name === null) return;
+    if (HTML_SINKS.has(name)) add(node, 'web-html-sink', `\`${name}\`: user data must only reach the DOM through textContent / el()`);
+    if (name === 'cssText') add(node, 'web-inline-style', '`cssText` (use a class, or style.setProperty)');
+  }
+  function checkWebCall(node) {
+    const callee = node.expression;
+    const first = node.arguments[0];
+    if (isIdent(callee, 'eval') || isIdent(callee, 'Function')) add(node, 'web-eval', `\`${callee.text}(...)\` (the CSP has no unsafe-eval)`);
+    if ((isIdent(callee, 'setTimeout') || isIdent(callee, 'setInterval')) && first && (ts.isStringLiteralLike(first) || ts.isTemplateExpression(first))) {
+      add(node, 'web-eval', `\`${callee.text}\` with a string (that is eval)`);
+    }
+    if (ts.isPropertyAccessExpression(callee)) {
+      const method = callee.name.text;
+      if (isIdent(callee.expression, 'document') && (method === 'write' || method === 'writeln')) add(node, 'web-html-sink', `\`document.${method}\``);
+      if (method === 'setAttribute' && first && ts.isStringLiteralLike(first) && first.text.toLowerCase() === 'style') add(node, 'web-inline-style', "`setAttribute('style', ...)` (the CSP has no inline styles)");
+    }
+  }
 
   // `@ts-` is searched in the raw text on purpose: the directives live in comments.
   text.split('\n').forEach((content, i) => {
@@ -86,8 +122,18 @@ export function checkSource(fileName, text) {
         if (kind && !assignedToUnknown(node)) {
           add(node, 'json-unknown', `${kind} must be assigned right away to a variable annotated \`: unknown\``);
         }
+        if (isWeb) checkWebCall(node);
         break;
       }
+      case ts.SyntaxKind.NewExpression:
+        if (isWeb && isIdent(node.expression, 'Function')) add(node, 'web-eval', '`new Function(...)` (the CSP has no unsafe-eval)');
+        break;
+      case ts.SyntaxKind.PropertyAccessExpression:
+      case ts.SyntaxKind.ElementAccessExpression:
+      case ts.SyntaxKind.PropertyAssignment:
+      case ts.SyntaxKind.ShorthandPropertyAssignment:
+        if (isWeb) checkWebMember(node);
+        break;
       default:
     }
     ts.forEachChild(node, visit);
