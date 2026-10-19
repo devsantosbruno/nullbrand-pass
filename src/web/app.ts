@@ -1,32 +1,37 @@
 // nullbrand front-end. Vanilla TypeScript, no dependencies.
 // User data is always inserted with textContent (never innerHTML).
-import { resolveLang, normalizeLang, errText } from './i18n.js';
+import { resolveLang, normalizeLang } from './i18n.js';
 import type { Lang } from './i18n.js';
-import type { ApiWarning, GenerateRequest, ImportPreviewResponse, PublicItem, StatusResponse } from './api.js';
+import type { PublicItem, StatusResponse } from './api.js';
 import {
   guardConfigResponse,
   guardCountResponse,
-  guardExportResponse,
   guardFolderDeleteResponse,
   guardFolderList,
   guardFolderNameResponse,
-  guardGenerateResponse,
-  guardImportAnswer,
-  guardMergeResponse,
   guardOkResponse,
   guardPublicItems,
-  guardShutdownAck,
   guardSshKeyResponse,
   guardStatusResponse,
   guardVaultItem,
-  isApiErrorResponse,
-  isImportPreviewResponse,
 } from './api-guards.js';
+
+
+
+
+
+
 import { api, ApiError, ApiResponseError, msgOf, setSessionScreenHandler } from './http.js';
-import { readJson } from './json.js';
-import { applyI18n, fmtDate, fmtRelativeTime, loadDicts, lc, rich, setLocale, setRich, t } from './locale.js';
+
+import { applyI18n, fmtDate, fmtRelativeTime, loadDicts, lc, rich, setLocale, t } from './locale.js';
 import { toast, toastError, toastIfInvalidResponse } from './toast.js';
 import { copy } from './clipboard.js';
+import { initGenerator } from './features/generator.js';
+import { initImportExport } from './features/import-export.js';
+import { initLayout } from './features/layout.js';
+import { initSecurity } from './features/security.js';
+import { initSession } from './features/session.js';
+import { paintMeter } from './ui/meter.js';
 import { screenShowing, showDetail, showScreen } from './shell.js';
 import { isItemType } from './vault-types.js';
 import type { IdentityKey, ItemType, VaultItem } from './vault-types.js';
@@ -34,8 +39,8 @@ import { $, $button, $dialog, $form, $input, $textarea, DomValueError, at, data,
 import { currentItem, state } from './state.js';
 import { strengthLevel } from './ui/strength.js';
 import { hostOf, isHttpUrl, normalizeUrl, siteDomain } from './ui/url.js';
-import { statusLine } from './ui/status-line.js';
-import { withBusy } from './ui/busy.js';
+
+
 import { applySecretInputs, isMasked, setMasked } from './ui/secret-input.js';
 import { createRevealToggle } from './ui/reveal-toggle.js';
 import type { RevealToggle } from './ui/reveal-toggle.js';
@@ -52,13 +57,6 @@ applySecretInputs(document);
 applyIcons(document);
 setSessionScreenHandler(showScreen);
 
-function paintMeter(span: HTMLElement, pw: string): void {
-  const { bits, level } = strengthLevel(pw);
-  const pct = Math.min(100, (bits / 100) * 100);
-  span.style.width = `${pct}%`;
-  span.style.background = level === 'weak' ? 'var(--err)' : level === 'medium' ? 'var(--warn)' : 'var(--ok)';
-}
-
 // ---------- Language ----------
 // Switches without reloading: static text via data-i18n attributes, dynamic parts re-rendered.
 function setLang(next: Lang, { persist = false }: { persist?: boolean } = {}): void {
@@ -73,7 +71,7 @@ function setLang(next: Lang, { persist = false }: { persist?: boolean } = {}): v
     renderSidebar();
     renderList();
     if (!$('#detail-view').hidden && state.current) renderView();
-    if (dlgGen.open) regen();
+    generator.repaint();
   }
   if (persist) {
     api('PUT /api/config', { guard: guardConfigResponse, body: { lang: next } }).catch(() => {});
@@ -158,91 +156,10 @@ async function refresh(): Promise<void> {
   renderList();
 }
 
-// ---------- Setup / Unlock ----------
-const setupPass = $input('#setup-pass');
-setupPass.addEventListener('input', () => paintMeter($('#setup-meter'), setupPass.value));
-// No <form> on these screens: without a form submission the browser has nothing to offer to save.
-const onEnterOrClick = (root: HTMLElement, btn: HTMLButtonElement, run: () => Promise<void>): void => {
-  btn.addEventListener('click', () => { void run(); });
-  root.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement && !btn.disabled) { e.preventDefault(); void run(); } });
-};
-onEnterOrClick($('#form-setup'), $button('#setup-btn'), async () => {
-  const p1 = setupPass.value;
-  const p2 = $input('#setup-pass2').value;
-  const err = $('#setup-error');
-  if (p1 !== p2) { err.textContent = t('setup.mismatch'); return; }
-  if (p1.length < 8) { err.textContent = t('setup.short'); return; }
-  try {
-    await withBusy($button('#setup-btn'), t('setup.creating'), () => t('setup.submit'), async () => {
-      await api('POST /api/setup', { guard: guardOkResponse, body: { password: p1 } });
-      setupPass.value = '';
-      $input('#setup-pass2').value = '';
-      await enterVault();
-      toast(t('setup.created'));
-    });
-  } catch (ex) {
-    err.textContent = msgOf(ex);
-  }
-});
+// ---------- Session ----------
+initSession({ enterVault });
 
-onEnterOrClick($('#form-unlock'), $button('#unlock-btn'), async () => {
-  const err = $('#unlock-error');
-  err.textContent = '';
-  try {
-    await withBusy($button('#unlock-btn'), t('unlock.unlocking'), () => t('unlock.submit'), async () => {
-      await api('POST /api/unlock', { guard: guardOkResponse, body: { password: $input('#unlock-pass').value } });
-      $input('#unlock-pass').value = '';
-      await enterVault();
-    });
-  } catch (ex) {
-    err.textContent = msgOf(ex);
-    $input('#unlock-pass').select();
-  }
-});
-
-{
-  const app = $('#screen-vault');
-  const btn = $button('#btn-sidebar');
-  const apply = (collapsed: boolean): void => {
-    app.classList.toggle('sidebar-collapsed', collapsed);
-    btn.setAttribute('aria-expanded', String(!collapsed));
-  };
-  try { apply(localStorage.getItem('sidebar-collapsed') === '1'); } catch {}
-  const toggle = (): void => {
-    const c = !app.classList.contains('sidebar-collapsed');
-    apply(c);
-    try { localStorage.setItem('sidebar-collapsed', c ? '1' : '0'); } catch {}
-  };
-  btn.addEventListener('click', toggle);
-  document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'b' && !app.hidden) {
-      e.preventDefault();
-      toggle();
-    }
-  });
-}
-
-$('#btn-lock').addEventListener('click', async () => {
-  try {
-    await api('POST /api/lock', { guard: guardOkResponse });
-  } catch (ex) {
-    toastIfInvalidResponse(ex);
-    return;
-  }
-  state.items = [];
-  state.selection.clear();
-  state.folders = [];
-  state.selectedId = null;
-  state.current = null;
-  showDetail(null);
-  // The session survives a lock: go back to the unlock screen.
-  try {
-    const st = await api('GET /api/status', { guard: guardStatusResponse });
-    state.status = st;
-    $('#unlock-path').textContent = st.vaultPath;
-  } catch {}
-  showScreen('unlock');
-});
+initLayout();
 
 // ---------- Sidebar ----------
 function folders(): string[] {
@@ -1126,7 +1043,7 @@ $('#btn-new').addEventListener('click', () => { state.selectedId = null; renderL
 $('#btn-edit').addEventListener('click', () => openEditor(state.current));
 $('#btn-cancel').addEventListener('click', () => (state.current && state.selectedId ? renderView() : showDetail(null)));
 fPassword.addEventListener('input', () => paintMeter($('#edit-meter'), fPassword.value));
-$('#edit-generate').addEventListener('click', () => openGenerator((pw) => {
+$('#edit-generate').addEventListener('click', () => generator.open((pw) => {
   fPassword.value = pw;
   passwordToggle.setShown(true);
   paintMeter($('#edit-meter'), pw);
@@ -1242,412 +1159,10 @@ $('#btn-delete').addEventListener('click', async () => {
 });
 
 // ---------- Generator ----------
-const dlgGen = $dialog('#dlg-generator');
-let genCallback: ((password: string) => void) | null = null;
-const genLength = $input('#gen-length');
-const genLenNum = $input('#gen-len-num');
+const generator = initGenerator();
 
-const clampLen = (v: string | number): number => Math.max(8, Math.min(128, Math.round(Number(v)) || 20));
+initImportExport({ refresh });
 
-function genOptions(): GenerateRequest {
-  return {
-    length: clampLen(genLenNum.value),
-    upper: $input('#gen-upper').checked,
-    lower: $input('#gen-lower').checked,
-    digits: $input('#gen-digits').checked,
-    symbols: $input('#gen-symbols').checked,
-    avoidAmbiguous: $input('#gen-ambig').checked,
-  };
-}
-async function regen(): Promise<void> {
-  try {
-    const r = await api('POST /api/generate', { guard: guardGenerateResponse, body: genOptions() });
-    renderGen(r.password);
-    $('#gen-bits').textContent = t('gen.bits', { bits: r.bits });
-  } catch (ex) {
-    $('#gen-output').textContent = '';
-    $('#gen-bits').textContent = msgOf(ex);
-  }
-}
-function openGenerator(cb: ((password: string) => void) | null = null): void {
-  genCallback = cb;
-  $('#gen-use').hidden = !cb;
-  dlgGen.showModal();
-  regen();
-}
-dlgGen.addEventListener('input', (e) => {
-  const target = e.target;
-  if (!(target instanceof HTMLInputElement)) return;
-  if (target.id === 'gen-length') genLenNum.value = target.value;
-  else if (target.id === 'gen-len-num') {
-    if (target.value === '') return;
-    genLength.value = String(clampLen(target.value));
-  }
-  regen();
-});
-// When leaving the numeric field, fixes out-of-range values.
-genLenNum.addEventListener('change', () => {
-  genLenNum.value = String(clampLen(genLenNum.value));
-  genLength.value = genLenNum.value;
-  regen();
-});
-// Enter in an input triggers the form's implicit submit (method=dialog) and would close the modal
-dlgGen.addEventListener('keydown', (e) => {
-  const target = e.target;
-  if (e.key === 'Enter' && target instanceof HTMLInputElement) {
-    e.preventDefault();
-    if (target.id === 'gen-len-num') target.dispatchEvent(new Event('change'));
-  }
-});
-$('#gen-regen').addEventListener('click', regen);
-// Colors each character: digits in pink, symbols in green. textContent remains the plain password.
-function renderGen(password: string): void {
-  const out = $('#gen-output');
-  out.textContent = '';
-  for (const ch of password) {
-    const kind = /[0-9]/.test(ch) ? 'num' : /[\p{L}]/u.test(ch) ? '' : 'sym';
-    out.append(kind ? el('span', { className: 'ch-' + kind, textContent: ch }) : document.createTextNode(ch));
-  }
-}
-$('#gen-copy').addEventListener('click', () => copy(textOf($('#gen-output')), t('field.password'), { sensitive: true }));
-$('#gen-use').addEventListener('click', () => { genCallback?.(textOf($('#gen-output'))); dlgGen.close(); });
-$('#btn-generator').addEventListener('click', () => openGenerator());
-
-// ---------- Import / Backup ----------
-const dlgTools = $dialog('#dlg-tools');
-const toolsMsg = statusLine($('#tools-msg'));
-$('#btn-tools').addEventListener('click', () => { toolsMsg(''); dlgTools.showModal(); });
-$('#btn-tools-close').addEventListener('click', () => dlgTools.close());
-
-// A list of warnings (translated by key + params, like an error) under a dialog's form.
-function renderWarnings(list: HTMLElement, warnings: readonly ApiWarning[]): void {
-  list.replaceChildren(...warnings.map((w) => el('li', { textContent: t(w.key, w.params) })));
-}
-
-// Hands a text (or a blob) to the browser as a download.
-function download(blob: Blob, name: string): void {
-  const a = el('a', { href: URL.createObjectURL(blob), download: name });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
-
-// ---------- Import a file ----------
-// The flow is: choose a file -> the server reads it WITHOUT importing (dry run) and says what it found -> the options can be changed
-// (every change asks again) -> Import.
-const dlgImport = $dialog('#dlg-import');
-const importFile = $input('#import-file');
-const importFolder = $input('#import-folder');
-const importFoldersMode = query(document, '#import-folders-mode', HTMLSelectElement);
-const importRun = $button('#btn-import-run');
-const importMsg = statusLine($('#import-msg'));
-
-let importText: string | undefined;
-// Answers arrive out of order when the options change quickly: only the latest one is shown.
-let importRequest = 0;
-
-function importBody(extra: object = {}): object {
-  return {
-    text: importText,
-    folder: importFolder.value.trim(),
-    ignoreFolders: importFoldersMode.value === 'ignore',
-    ...extra,
-  };
-}
-
-function showImportPreview(preview: ImportPreviewResponse): void {
-  $('#import-preview').hidden = false;
-  $('#import-found').textContent = t('import.dlg.found', { count: preview.count });
-  renderWarnings($('#import-warnings'), preview.warnings);
-  importRun.disabled = preview.count === 0;
-}
-
-async function importPreview(): Promise<void> {
-  if (importText === undefined) return;
-  const mine = ++importRequest;
-  importMsg(t('import.dlg.reading'), true);
-  importRun.disabled = true;
-  try {
-    const answer = await api('POST /api/import', { guard: guardImportAnswer, body: importBody({ dryRun: true }) });
-    if (mine !== importRequest) return;
-    if (!isImportPreviewResponse(answer)) throw new ApiResponseError('POST /api/import', 'response: expected a preview');
-    importMsg(null);
-    showImportPreview(answer);
-  } catch (ex) {
-    if (mine !== importRequest) return;
-    $('#import-preview').hidden = true;
-    importMsg(msgOf(ex));
-  }
-}
-
-$('#btn-import-open').addEventListener('click', () => {
-  importText = undefined;
-  importFile.value = '';
-  importFolder.value = '';
-  $('#import-preview').hidden = true;
-  importRun.disabled = true;
-  importMsg(null);
-  $('#import-folder-list').replaceChildren(...state.folders.map((f) => el('option', { value: f })));
-  dlgTools.close();
-  dlgImport.showModal();
-});
-$('#btn-import-close').addEventListener('click', () => dlgImport.close());
-dlgImport.addEventListener('close', () => { importText = undefined; });
-
-importFile.addEventListener('change', async () => {
-  const file = firstFile(importFile);
-  importText = file ? await file.text() : undefined;
-  if (importText === undefined) {
-    $('#import-preview').hidden = true;
-    importRun.disabled = true;
-    return;
-  }
-  await importPreview();
-});
-importFoldersMode.addEventListener('change', importPreview);
-importFolder.addEventListener('change', importPreview);
-
-importRun.addEventListener('click', async () => {
-  if (importText === undefined) return importMsg(t('import.dlg.chooseFile'));
-  importRun.disabled = true;
-  importMsg(t('tools.importing'), true);
-  try {
-    const result = await api('POST /api/import', { guard: guardImportAnswer, body: importBody() });
-    if (isImportPreviewResponse(result)) throw new ApiResponseError('POST /api/import', 'response: expected a result');
-    await refresh();
-    importText = undefined;
-    importFile.value = '';
-    dlgImport.close();
-    const summary = [t('import.added', { count: result.added }), result.skipped && t('import.skipped', { count: result.skipped }), result.ignored && t('import.ignored', { count: result.ignored })].filter(Boolean).join(', ');
-    toast(`${summary}. ${t('import.deleteExport')}`, 6000);
-  } catch (ex) {
-    importRun.disabled = false;
-    importMsg(msgOf(ex));
-  }
-});
-
-// ---------- Export ----------
-const dlgExport = $dialog('#dlg-export');
-const exportProtection = query(document, '#export-protection', HTMLSelectElement);
-const exportConfirm = $input('#export-confirm');
-const exportPassword = $input('#export-password');
-const exportMsg = statusLine($('#export-msg'));
-
-// Encrypted is the native backup, readable only by nullbrand; unencrypted is a JSON file any app can be pointed at.
-function renderExportChoices(): void {
-  const plain = exportProtection.value === 'plain';
-  $('#export-plain').hidden = !plain;
-  renderWarnings($('#export-warnings'), []);
-  // What the plain file cannot hold, counted from the items already on screen.
-  const ssh = state.items.filter((i) => i.type === 'ssh').length;
-  $('#export-note').textContent = !plain ? t('export.dlg.encryptedNote') : ssh > 0 ? t('export.dlg.lossyJson', { count: ssh }) : '';
-}
-
-$('#btn-export-open').addEventListener('click', () => {
-  exportProtection.value = 'encrypted';
-  renderExportChoices();
-  exportMsg(null);
-  dlgTools.close();
-  dlgExport.showModal();
-});
-$('#btn-export-close').addEventListener('click', () => dlgExport.close());
-dlgExport.addEventListener('close', () => {
-  exportPassword.value = '';
-  exportConfirm.checked = false;
-});
-exportProtection.addEventListener('change', renderExportChoices);
-
-// The encrypted backup is a file, not JSON for the UI to read: it does not go through api(), and the answer is handed to the browser as it is.
-async function exportBackup(): Promise<void> {
-  const res = await fetch('/api/export/backup');
-  if (!res.ok) {
-    const answer = await readJson(res);
-    const d = isApiErrorResponse(answer) ? answer : { key: undefined, params: undefined, error: undefined };
-    throw new Error(errText(t, { key: d.key, params: d.params, message: d.error }) || t('tools.export.failed'));
-  }
-  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'nullbrand-backup.json';
-  download(await res.blob(), name);
-  exportMsg(t('tools.export.done'), true);
-}
-
-async function exportPlain(): Promise<void> {
-  if (!exportConfirm.checked) return exportMsg(t('export.dlg.needConfirm'));
-  if (!exportPassword.value) return exportMsg(t('export.dlg.needPassword'));
-  const file = await api('POST /api/export', { guard: guardExportResponse, body: { password: exportPassword.value, confirm: true } });
-  exportPassword.value = '';
-  exportConfirm.checked = false;
-  download(new Blob([file.text], { type: file.mime }), file.filename);
-  renderWarnings($('#export-warnings'), file.warnings);
-  exportMsg(t('export.deleteAfter'), true);
-}
-
-$('#btn-export-run').addEventListener('click', async () => {
-  exportMsg(null);
-  try {
-    if (exportProtection.value === 'plain') await exportPlain();
-    else await exportBackup();
-  } catch (ex) {
-    exportMsg(msgOf(ex));
-  }
-});
-
-$('#btn-restore').addEventListener('click', async () => {
-  const file = firstFile($input('#file-backup'));
-  if (!file) return toolsMsg(t('tools.restore.chooseFile'));
-  toolsMsg(t('tools.restoring'), true);
-  try {
-    const r = await api('POST /api/import/backup', { guard: guardMergeResponse, body: { text: await file.text(), password: $input('#backup-pass').value } });
-    $input('#backup-pass').value = '';
-    $input('#file-backup').value = '';
-    await refresh();
-    toolsMsg(`${[t('import.added', { count: r.added }), r.skipped && t('import.existed', { count: r.skipped })].filter(Boolean).join(', ')}.`, true);
-  } catch (ex) {
-    toolsMsg(msgOf(ex));
-  }
-});
-
-// ---------- Security settings ----------
-const dlgPassword = $dialog('#dlg-password');
-const dlgDestroy = $dialog('#dlg-destroy');
-const pwMsg = statusLine($('#pw-msg'));
-const secBtn = $button('#btn-security');
-const secItems = $('#security-items');
-const placeSecMenu = (): void => {
-  // the body uses CSS zoom: position:fixed coordinates are multiplied by it
-  const z = parseFloat(getComputedStyle(document.body).zoom) || 1;
-  const r = secBtn.getBoundingClientRect();
-  secItems.style.left = `${(r.right + 4) / z}px`;
-  secItems.style.top = 'auto';
-  secItems.style.bottom = `${(window.innerHeight - r.bottom) / z}px`;
-};
-// The Esc of this menu is not stopped: it still reaches the page (as it always has).
-const secMenu = createMenu({ trigger: secBtn, menu: secItems, itemSelector: '[role=menuitem]', place: placeSecMenu, onResize: 'place', keyScope: $('#security-menu'), stopEscape: false });
-secItems.addEventListener('click', (e) => { if (e.target instanceof HTMLAnchorElement) secMenu.close(); });
-$('#btn-open-pw').addEventListener('click', () => { secMenu.close(); pwMsg(''); dlgPassword.showModal(); });
-$('#btn-pw-close').addEventListener('click', () => dlgPassword.close());
-$('#btn-open-shutdown').addEventListener('click', async () => {
-  secMenu.close();
-  if (!await confirm({ title: t('quit.title'), body: rich(t('quit.body')), okLabel: t('quit.confirm'), cancelLabel: t('common.cancel') })) return;
-  await api('POST /api/shutdown', { guard: guardShutdownAck }).catch(() => {});
-  document.body.replaceChildren(el('main', { className: 'screen center' },
-    el('div', { className: 'card auth' }, el('h1', { textContent: t('quit.doneTitle') }),
-      el('p', { className: 'muted' }))));
-  setRich(query(document, 'main p', HTMLElement), 'quit.doneBody', 'npx nullbrand');
-});
-$('#btn-open-destroy').addEventListener('click', () => {
-  secMenu.close();
-  setRich($('#destroy-text'), 'destroy.body', state.status?.vaultPath || '');
-  $input('#destroy-confirm').value = '';
-  $('#destroy-msg').textContent = '';
-  $button('#btn-destroy').disabled = true;
-  dlgDestroy.showModal();
-});
-$('#btn-destroy-cancel').addEventListener('click', () => dlgDestroy.close());
-const destroyConfirm = $input('#destroy-confirm');
-destroyConfirm.addEventListener('input', () => { $button('#btn-destroy').disabled = !destroyConfirm.value; });
-$('#btn-destroy').addEventListener('click', async () => {
-  try {
-    await api('POST /api/destroy', { guard: guardOkResponse, body: { password: destroyConfirm.value } });
-  } catch (ex) {
-    $('#destroy-msg').textContent = msgOf(ex);
-    return;
-  }
-  dlgDestroy.close();
-  state.items = [];
-  state.selection.clear();
-  state.folders = [];
-  const st = state.status;
-  if (st !== null) state.status = { ...st, exists: false, unlocked: false };
-  showScreen('setup');
-  toast(t('destroy.doneHint'), 9000);
-});
-
-$('#btn-change-pw').addEventListener('click', async () => {
-  const next = $input('#pw-next').value;
-  if (next.length < 8) return pwMsg(t('pw.short'));
-  pwMsg(t('pw.changing'), true);
-  try {
-    await api('POST /api/password', { guard: guardOkResponse, body: { current: $input('#pw-current').value, next } });
-    $input('#pw-current').value = '';
-    $input('#pw-next').value = '';
-    pwMsg(t('pw.done'), true);
-  } catch (ex) {
-    pwMsg(msgOf(ex));
-  }
-});
-
-// Auto-lock: the server locks; here we only check when returning to the tab.
-document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState !== 'visible' || $('#screen-vault').hidden) return;
-  try {
-    const s = await api('GET /api/status', { guard: guardStatusResponse });
-    if (!s.unlocked) showScreen('unlock');
-  } catch {}
-});
-
-// Resize list | detail
-(() => {
-  const MAX = 640, KEY = 'listWidth';
-  const app = $('#screen-vault');
-  const handle = $('#resize-handle');
-  const handleParent = (): HTMLElement => expectInstance(handle.parentElement, HTMLElement, '#resize-handle parent');
-  // Minimum = natural width of the floating selection box (+ 12px margin on each side),
-  // measured on the spot: it depends on font, zoom and device language.
-  const bar = $('#sel-bar');
-  const minW = (): number => {
-    const wasHidden = bar.hidden, prevMax = bar.style.maxWidth;
-    bar.hidden = false;
-    bar.style.maxWidth = 'none';
-    const w = bar.offsetWidth;
-    bar.style.maxWidth = prevMax;
-    bar.hidden = wasHidden;
-    return Math.ceil(w) + 24 || 260;
-  };
-  // The app uses CSS zoom: clientX/rect are in visual px, the variable in local px.
-  const zoom = (): number => handleParent().getBoundingClientRect().width / handleParent().offsetWidth || 1;
-  const clamp = (w: number): number => Math.max(minW(), Math.min(MAX, Math.min(w, (window.innerWidth / zoom()) * 0.6)));
-  const apply = (w: number): void => app.style.setProperty('--list-w', clamp(w) + 'px');
-  const save = (w: number): void => { try { localStorage.setItem(KEY, String(Math.round(clamp(w)))); } catch {} };
-  try { const stored = localStorage.getItem(KEY); const w = stored === null ? NaN : parseInt(stored, 10); if (w) apply(w); } catch {}
-  const current = (): number => handleParent().offsetWidth;
-  let stop: (() => void) | null = null;
-  handle.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    if (stop) stop();
-    const startX = e.clientX, startW = current(), z = zoom();
-    try { handle.setPointerCapture(e.pointerId); } catch {}
-    app.classList.add('resizing');
-    const move = (ev: PointerEvent): void => {
-      if (ev.buttons === 0) return finish(); // released outside and the pointerup was lost
-      apply(startW + (ev.clientX - startX) / z);
-    };
-    const finish = (): void => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', finish);
-      window.removeEventListener('pointercancel', finish);
-      window.removeEventListener('blur', finish);
-      handle.removeEventListener('lostpointercapture', finish);
-      app.classList.remove('resizing');
-      save(current());
-      stop = null;
-    };
-    stop = finish;
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', finish);
-    window.addEventListener('pointercancel', finish);
-    window.addEventListener('blur', finish);
-    handle.addEventListener('lostpointercapture', finish);
-  });
-  handle.addEventListener('dragstart', (e) => e.preventDefault());
-  handle.addEventListener('dblclick', () => { app.style.removeProperty('--list-w'); try { localStorage.removeItem(KEY); } catch {} });
-  handle.addEventListener('keydown', (e) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    e.preventDefault();
-    const w = current() + (e.key === 'ArrowRight' ? 16 : -16);
-    apply(w); save(w);
-  });
-})();
+initSecurity();
 
 boot().catch(toastError);
