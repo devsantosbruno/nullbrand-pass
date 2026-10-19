@@ -1,13 +1,13 @@
 // nullbrand command-line interface.
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { Vault, vaultExists, destroyVault, defaultVaultPath, readBackupItems, hardenPermissions } from './vault.js';
+import { Vault, vaultExists, destroyVault, defaultVaultPath, readBackupItems, hardenPermissions, verifyMasterPassword, writePrivateFile } from './vault.js';
 import type { VaultItem } from './shared/vault-types.js';
 import { hasErrorCode, isObjectLike } from './shared/guards.js';
 import type { TranslateParams, Translator } from './shared/i18n.js';
 import { generatePassword, entropyBits } from './generator.js';
-import { parseBitwardenExport } from './importers/bitwarden.js';
+import { parseImport, placeImport, exportPlain, tooLarge, MAX_IMPORT_BYTES } from './formats/index.js';
 import { startServer, type RunningServer } from './server.js';
 import { ask, confirm, closePrompt } from './prompt.js';
 import { openBrowser, isHeadless } from './system.js';
@@ -51,9 +51,13 @@ ${row('add', 'help.cmd.add')}
 ${row('rm <query>', 'help.cmd.rm')}
 ${row('generate [-l 20] [--no-symbols]', 'help.cmd.generate')}
            [--no-digits] [--no-upper] [--no-lower] [--avoid-ambiguous]
-${row('import bitwarden <file.json>', 'help.cmd.importBitwarden')}
+${row('import <file.json>', 'help.cmd.import')}
+${row('  [--folder <name>]', 'help.opt.folder')}
+${row('  [--ignore-folders]', 'help.opt.ignoreFolders')}
 ${row('import backup <file.json>', 'help.cmd.importBackup')}
 ${row('export <file.json>', 'help.cmd.export')}
+${row('export <file.json> --unencrypted', 'help.cmd.exportPlain')}
+${row('  [--i-understand]', 'help.opt.iUnderstand')}
 ${row('passwd', 'help.cmd.passwd')}
 ${row('destroy [--yes]', 'help.cmd.destroy')}
 ${row('where', 'help.cmd.where')}
@@ -101,8 +105,8 @@ interface Flags {
 }
 
 // Flags that take a value (--port 3000 / --port=3000) and switches (--open / --no-open); anything else is reported as unknown.
-const VALUE_FLAGS: readonly string[] = ['port', 'idle', 'vault', 'length', 'clear', 'lang'];
-const SWITCH_FLAGS: readonly string[] = ['help', 'version', 'show', 'yes', 'open', 'upper', 'lower', 'digits', 'symbols', 'avoid-ambiguous', 'print-url'];
+const VALUE_FLAGS: readonly string[] = ['port', 'idle', 'vault', 'length', 'clear', 'lang', 'folder'];
+const SWITCH_FLAGS: readonly string[] = ['help', 'version', 'show', 'yes', 'open', 'upper', 'lower', 'digits', 'symbols', 'avoid-ambiguous', 'print-url', 'ignore-folders', 'unencrypted', 'i-understand'];
 
 // `missing`: value flags left without a value (last argument, or followed by another `--flag`). `unknown`: arguments that are not a known flag.
 function parseArgs(argv: readonly string[]): { positional: string[]; flags: Flags; missing: string[]; unknown: string[] } {
@@ -211,6 +215,48 @@ function printItems(items: readonly VaultItem[]): void {
     const name = i.name.length > w ? i.name.slice(0, w - 1) + '…' : i.name.padEnd(w);
     const detail = i.type === 'note' ? c.dim(t('cli.kind.note')) : i.type === 'ssh' ? c.dim(t('cli.kind.ssh') + (i.sshHost ? ' · ' + (i.sshUser ? i.sshUser + '@' : '') + i.sshHost : '')) : i.type === 'identity' ? c.dim(t('cli.kind.identity') + (i.fullName ? ' · ' + i.fullName : '')) : i.type === 'card' ? c.dim(t('cli.kind.card') + (i.cardNumber ? ' •••• ' + i.cardNumber.replace(/\D/g, '').slice(-4) : '')) : `${i.username}${i.uris[0] ? c.dim('  ' + i.uris[0]) : ''}`;
     console.log(`  ${i.favorite ? c.bold('★') : ' '} ${name}  ${detail}`);
+  }
+}
+
+function importSummary(added: number, skipped: number, ignored: number): string {
+  return [t('import.added', { count: added }), skipped && t('import.skipped', { count: skipped }), ignored && t('import.ignored', { count: ignored })].filter(Boolean).join(', ');
+}
+
+// The import flags: where the items go.
+function importOptions(flags: Flags): { folder?: string; ignoreFolders: boolean } {
+  const folder = flags['folder'];
+  return { ...(typeof folder === 'string' && { folder }), ignoreFolders: flags['ignore-folders'] === true };
+}
+
+async function importBackup(path: string | undefined, vaultPath: string): Promise<void> {
+  const file = path && resolve(path);
+  if (!file) throw new CliError(t('cli.import.usage'));
+  if (!existsSync(file)) throw new CliError(t('cli.import.notFound', { path: file }));
+  const pw = await ask(t('cli.import.backupPassword') + ' ', { hidden: true });
+  let items: readonly Readonly<Record<string, unknown>>[];
+  try {
+    items = await readBackupItems(file, pw);
+  } catch (err) {
+    if (hasErrorCode(err, 'WRONG_PASSWORD')) throw new CliError(t('err.http.backupWrongPassword'));
+    throw err;
+  }
+  console.log(c.dim(t('cli.import.found', { count: items.length })));
+  const vault = await unlockInteractive(vaultPath);
+  const r = await vault.merge(items);
+  console.log(`${c.ok('✓')} ${importSummary(r.added, r.skipped, 0)}.`);
+}
+
+// An unencrypted export asks for the master password again (the key in memory is not proof the person at the keyboard knows it)
+// and for an explicit acknowledgement: --i-understand, or a y/N answer.
+async function confirmPlainExport(vaultPath: string, acknowledged: boolean): Promise<void> {
+  console.error(c.red('! ') + t('export.warning'));
+  if (!acknowledged && !(await confirmT(t('cli.export.confirmPlain')))) throw new CliError(t('cli.cancelled'));
+  const pw = await ask(t('cli.prompt.master') + ' ', { hidden: true });
+  try {
+    await verifyMasterPassword(pw, vaultPath);
+  } catch (err) {
+    if (hasErrorCode(err, 'WRONG_PASSWORD')) throw new CliError(errText(t, err));
+    throw err;
   }
 }
 
@@ -366,40 +412,40 @@ const commands: Record<string, Command | undefined> = {
     if (process.stdout.isTTY) console.error(c.dim(t('cli.generate.entropy', { bits: entropyBits({ ...opts, length: pw.length }) })));
   },
 
-  async import({ positional, vaultPath }) {
-    const kind = positional[1];
-    const file = positional[2] && resolve(positional[2]);
-    if ((kind !== 'bitwarden' && kind !== 'backup') || !file) {
-      throw new CliError(t('cli.import.usage'));
-    }
+  async import({ positional, flags, vaultPath }) {
+    if (positional[1] === 'backup') return importBackup(positional[2], vaultPath);
+    const file = positional[1] && resolve(positional[1]);
+    if (!file) throw new CliError(t('cli.import.usage'));
     if (!existsSync(file)) throw new CliError(t('cli.import.notFound', { path: file }));
-    let items: readonly Readonly<Record<string, unknown>>[];
-    let ignored = 0;
-    if (kind === 'bitwarden') {
-      ({ items, ignored } = parseBitwardenExport(await readFile(file, 'utf8')));
-    } else {
-      const pw = await ask(t('cli.import.backupPassword') + ' ', { hidden: true });
-      try {
-        items = await readBackupItems(file, pw);
-      } catch (err) {
-        if (hasErrorCode(err, 'WRONG_PASSWORD')) throw new CliError(t('err.http.backupWrongPassword'));
-        throw err;
-      }
-    }
-    console.log(c.dim(t('cli.import.found', { count: items.length })));
+    if ((await stat(file)).size > MAX_IMPORT_BYTES) throw tooLarge();
+
+    const options = importOptions(flags);
+    const plan = parseImport(await readFile(file, 'utf8'));
+    console.log(c.dim(t('cli.import.found', { count: plan.items.length })));
+
     const vault = await unlockInteractive(vaultPath);
-    const r = await vault.merge(items);
-    const parts = [t('import.added', { count: r.added }), r.skipped && t('import.skipped', { count: r.skipped }), ignored && t('import.ignored', { count: ignored })].filter(Boolean);
-    console.log(`${c.ok('✓')} ${parts.join(', ')}.`);
-    if (kind === 'bitwarden') console.log(c.dim('  ' + t('import.deleteExport')));
+    const placed = placeImport(plan, { ...options, existingFolders: vault.listFolders() });
+    const r = await vault.merge(placed.items);
+    for (const w of placed.warnings) console.log(c.dim('  ! ' + t(w.key, w.params)));
+    console.log(`${c.ok('✓')} ${importSummary(r.added, r.skipped, placed.ignored)}.`);
+    console.log(c.dim('  ' + t('import.deleteExport')));
   },
 
-  async export({ positional, vaultPath }) {
-    const dest = positional[1] ? resolve(positional[1]) : resolve(`nullbrand-backup-${new Date().toISOString().slice(0, 10)}.json`);
+  async export({ positional, flags, vaultPath }) {
+    const plain = flags['unencrypted'] === true;
+    const dest = positional[1] ? resolve(positional[1]) : resolve(plain ? exportPlain([], []).filename : `nullbrand-backup-${new Date().toISOString().slice(0, 10)}.json`);
     if (existsSync(dest) && !(await confirmT(t('cli.export.overwrite', { path: dest })))) return console.log(t('cli.cancelled'));
     const vault = await unlockInteractive(vaultPath);
-    await vault.exportBackup(dest);
-    console.log(`${c.ok('✓')} ${t('cli.export.saved', { path: dest })}`);
+    if (!plain) {
+      await vault.exportBackup(dest);
+      return console.log(`${c.ok('✓')} ${t('cli.export.saved', { path: dest })}`);
+    }
+    await confirmPlainExport(vaultPath, flags['i-understand'] === true);
+    const { text, warnings } = exportPlain(vault.items, vault.listFolders());
+    await writePrivateFile(dest, text);
+    for (const w of warnings) console.log(c.dim('  ! ' + t(w.key, w.params)));
+    console.log(`${c.ok('✓')} ${t('cli.export.savedPlain', { path: dest })}`);
+    console.log(c.red('! ') + t('export.deleteAfter'));
   },
 
   async passwd({ vaultPath }) {
