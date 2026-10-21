@@ -1,0 +1,4 @@
+# Keep line endings identical on every OS: the tests read workflows and sources with LF-only patterns.
+* text=auto eol=lf
+*.png binary
+*.ico binary
