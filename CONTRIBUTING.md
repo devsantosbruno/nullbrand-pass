@@ -21,6 +21,19 @@ Requires Node.js 22.14 or newer.
 - **Commits** follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `test:`...).
 - **Sign off** your commits (`git commit -s`, Developer Certificate of Origin).
 
+## Desktop app
+
+The Electron shell lives in `desktop/` and has its own `package.json`, lockfile and dependencies (Electron and electron-builder, development only). The core in `src/` never imports from it and must not gain a dependency because of it. From `desktop/`:
+
+```bash
+npm ci
+npm test            # builds the core and the shell, runs the shell's unit tests
+npm start           # builds, then opens the app (downloads the Electron binary on first run)
+npm run package     # unsigned installer for the host OS in desktop/dist/release
+```
+
+The decision and the hardening it requires are in [docs/adr/0001-desktop-packaging.md](docs/adr/0001-desktop-packaging.md). Keep `contextIsolation`, `sandbox` and the navigation and request filters intact; `desktop/test/security.test.ts` pins them. When you try the app, set `NULLBRAND_HOME` to a scratch folder so your real vault is not touched.
+
 ## Changelog and releases
 
 User-visible changes go under `[Unreleased]` in `CHANGELOG.md` ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)). Versions follow [Semantic Versioning](https://semver.org/) and stay `0.x` until an independent audit. Maintainers: see [docs/releasing.md](docs/releasing.md).

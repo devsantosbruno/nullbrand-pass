@@ -15,6 +15,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - "How to verify your download" in the README, and `docs/releasing.md` with the versioning and update policy (no update checks).
 - Security policy (`SECURITY.md`), CodeQL and Scorecard workflows, coverage thresholds for `crypto` and `vault`, and a package-contents check in CI.
 - Tests for the real clipboard and for Windows behavior.
+- Desktop app shell (`desktop/`, Electron): runs the existing server and UI in one hardened window with no external browser. `npm run package` in `desktop/` builds an unsigned installer for the host OS; installers are not part of releases yet. Decision recorded in `docs/adr/0001-desktop-packaging.md`.
 
 ### Changed
 - The web interface code is split into `app.ts` (composition), `features/` (one per area) and `ui/` (reusable components: confirm dialog, popup menu, icons, reveal toggle). Same screens and behavior. `npm run check` now also rejects `innerHTML`, `eval` and inline styles under `src/web/`.

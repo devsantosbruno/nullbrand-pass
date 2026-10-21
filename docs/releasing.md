@@ -40,4 +40,4 @@ A failed run publishes nothing. Fix the problem, delete the tag (`git push --del
 
 ## Not yet covered
 
-Desktop installers (specs 07 and 09) are not built yet. When they exist, they join the `build` job, get signed and notarized with the platform tools, and are listed in `SHA256SUMS` so the same verification covers them.
+Desktop installers can be built locally (`npm run package` in `desktop/`, unsigned; see [ADR 0001](adr/0001-desktop-packaging.md)) but are not part of the release workflow yet. When they do, they go into the `build` job, get signed and notarized with the platform tools, and are listed in `SHA256SUMS` so the same verification covers them.
