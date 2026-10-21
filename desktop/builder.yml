@@ -32,7 +32,10 @@ electronFuses:
   resetAdHocDarwinSignature: true
 
 mac:
-  target: dmg
+  # Both Mac architectures: a Mac with an Intel chip needs its own download. Release signing repeats this list in builder.release.mjs.
+  target:
+    - target: dmg
+      arch: [x64, arm64]
   category: public.app-category.utilities
   # null: never pick up a certificate from the keychain by accident. Release signing is in builder.release.yml.
   identity: null
