@@ -1,4 +1,4 @@
-// A reader that closes the pipe early (`nullbrand list | head -1`) makes stdout/stderr emit 'error' (EPIPE). Without a listener Node
+// A reader that closes the pipe early (`nullbrand-pass list | head -1`) makes stdout/stderr emit 'error' (EPIPE). Without a listener Node
 // dies with a stack trace. EPIPE is normal flow here and ends the process quietly; any other write error is reported and fails the run.
 import { hasErrorCode } from './shared/guards.js';
 

@@ -648,7 +648,7 @@ export function startServer({
       }
       // Everything except /auth requires a session, so another local user hitting the port gets a 401, not even static files.
       if (!hasValidSession(req)) {
-        throw new HttpError(401, 'Invalid or ended session. Run nullbrand again to open a new one.', 'err.http.noSession');
+        throw new HttpError(401, 'Invalid or ended session. Run nullbrand-pass again to open a new one.', 'err.http.noSession');
       }
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET') {

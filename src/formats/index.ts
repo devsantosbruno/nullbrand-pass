@@ -1,4 +1,4 @@
-// Public entry of the import/export flow, exposed as the `nullbrand/formats` subpath.
+// Public entry of the import/export flow, exposed as the `nullbrand-pass/formats` subpath.
 export { parseImport, placeImport, planImport, tooLarge, MAX_IMPORT_BYTES } from './import.js';
 export type { ImportOptions, ImportPlan } from './import.js';
 export { exportPlain } from './export.js';

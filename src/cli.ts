@@ -25,7 +25,7 @@ const c = {
   warn: (s: string) => (color ? `\x1b[33m${s}\x1b[0m` : s),
   red: (s: string) => (color ? `\x1b[31m${s}\x1b[0m` : s),
 };
-const logo = () => `${c.dim('$')} ${c.bold('nullbrand')} ${c.dim('v' + version)}`;
+const logo = () => `${c.dim('$')} ${c.bold('nullbrand-pass')} ${c.dim('v' + version)}`;
 
 // Language of this process; set by main() once the language sources are resolved.
 let t: Translator = translator('en');
@@ -38,8 +38,8 @@ ${logo()}
 ${t('help.tagline')}
 
 ${c.bold(t('help.usage'))}
-${row('nullbrand', 'help.usageUi')}
-  nullbrand <command> [options]
+${row('nullbrand-pass', 'help.usageUi')}
+  nullbrand-pass <command> [options]
 
 ${c.bold(t('help.commands'))}
 ${row('ui', 'help.cmd.ui')}

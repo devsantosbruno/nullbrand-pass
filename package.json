@@ -1,10 +1,10 @@
 {
-  "name": "nullbrand",
+  "name": "nullbrand-pass",
   "version": "0.1.0",
   "description": "100% local, offline password manager with an encrypted vault file (early release, not independently audited).",
   "type": "module",
   "bin": {
-    "nullbrand": "dist/bin/nullbrand.js"
+    "nullbrand-pass": "dist/bin/nullbrand.js"
   },
   "exports": {
     ".": "./dist/src/vault.js",
