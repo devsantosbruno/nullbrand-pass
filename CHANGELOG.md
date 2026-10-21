@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.0-rc.1] - 2026-10-21
+
+Release candidate to validate the release pipeline (installers, checksums, signatures). Published to npm under the `next` tag only.
+
 ### Added
 - Import by file layout, with no source to choose: `import <file.json>` (CLI), `POST /api/import` and a web dialog detect the layout from its structure. Options: destination folder and ignoring the folders of the file. A dry run (`dryRun`) shows what would be imported.
 - Unencrypted `.json` export (`export <file.json> --unencrypted`, `POST /api/export`, web dialog), behind the master password and an explicit confirmation, written with mode `0600`.
