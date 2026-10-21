@@ -1,7 +1,7 @@
 // Guard against type-system escape hatches. Plain Node + the TypeScript parser (the project's only devDependency).
 // Parsing real syntax (not grepping text) is what keeps comments and strings from causing false positives.
 //
-//   node scripts/check-no-escape.mjs [dir ...]     (default dirs: src bin test)
+//   node scripts/check-no-escape.mjs [dir ...]     (default dirs: src bin test desktop)
 //
 // Fails (exit 1) on, in every .ts / .d.ts file:
 //   - the `any` type                             - `as X` / <X>x assertions (only `as const` is allowed)
@@ -168,7 +168,7 @@ function walk(dir) {
 }
 
 /** Runs every check over a project root. */
-export function checkProject(root, { dirs = ['src', 'bin', 'test'] } = {}) {
+export function checkProject(root, { dirs = ['src', 'bin', 'test', 'desktop'] } = {}) {
   const violations = [];
   const unknowns = [];
   for (const dir of dirs) {
