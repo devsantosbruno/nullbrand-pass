@@ -1,5 +1,6 @@
 // Decisions of the desktop shell that do not need Electron to run, so they can be tested with plain Node: what the window may load,
 // how the renderer is locked down, and the application menu. main.ts only wires them to Electron.
+import { randomBytes } from 'node:crypto';
 import type { MenuItemConstructorOptions, WebPreferences } from 'electron';
 
 /** In-memory session partition (no `persist:` prefix): the session cookie, cache and storage never reach the disk. */
@@ -17,6 +18,26 @@ export function isAppUrl(origin: string, raw: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** A fresh per-launch secret (256 bits). It lives in the main process only: never in an argument, a file, a URL or the page. */
+export function newDesktopSecret(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+/**
+ * Request headers of the window with the launch secret added, but only for requests to the app origin: the secret never goes to any
+ * other URL. Any header the page set under the same name is replaced, so the page cannot spoof or strip it.
+ */
+export function withDesktopSecret(
+  origin: string,
+  raw: string,
+  headers: Readonly<Record<string, string>>,
+  name: string,
+  secret: string,
+): Record<string, string> {
+  const rest = Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== name));
+  return isAppUrl(origin, raw) ? { ...rest, [name]: secret } : rest;
 }
 
 /** The only external site the window may send the user to (opened in the system browser, never inside the window). */

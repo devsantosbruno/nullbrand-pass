@@ -1,11 +1,21 @@
 // Desktop shell: starts the local server of the core inside this process and shows its UI in one hardened window.
-// No external browser is opened and no secret goes through a process argument; the bootstrap token only lives in memory (a stronger
-// delivery is planned). The core (`./core`, a copy of the compiled ../src) is imported unchanged.
-import { app, BrowserWindow, dialog, Menu, nativeTheme, session, shell } from 'electron';
+// No external browser is opened and no secret goes through a process argument. A per-launch secret lives only in this process: the
+// server refuses every request without it, and the window gets it from a request hook, never from the page. The core (`./core`, a copy of the compiled ../src) is imported unchanged.
+import { app, BrowserWindow, dialog, Menu, nativeTheme, powerMonitor, session, shell } from 'electron';
 import { join } from 'node:path';
-import { startServer, type RunningServer } from './core/src/server.js';
+import { DESKTOP_SECRET_HEADER, startServer, type RunningServer } from './core/src/server.js';
 import { windowChrome } from './chrome.js';
-import { appOrigin, isAllowedRequest, isAppUrl, isExternalLinkAllowed, menuTemplate, PARTITION, webPreferences } from './security.js';
+import {
+  appOrigin,
+  isAllowedRequest,
+  isAppUrl,
+  isExternalLinkAllowed,
+  menuTemplate,
+  newDesktopSecret,
+  PARTITION,
+  webPreferences,
+  withDesktopSecret,
+} from './security.js';
 
 const TITLE = 'nullbrand pass';
 
@@ -26,7 +36,7 @@ function fail(err: unknown): never {
 }
 
 // Navigation, popups, <webview> and permissions: the window can only ever show the local server.
-function lockDown(origin: string): void {
+function lockDown(origin: string, secret: string): void {
   app.on('web-contents-created', (_event, contents) => {
     // Never a new window. The one allowed external link (the contact page) goes to the system browser.
     contents.setWindowOpenHandler(({ url }) => {
@@ -47,6 +57,25 @@ function lockDown(origin: string): void {
   ses.setPermissionCheckHandler(() => false);
   ses.setDevicePermissionHandler(() => false);
   ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => callback({ cancel: !isAllowedRequest(origin, details.url) }));
+  ses.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) =>
+    callback({ requestHeaders: withDesktopSecret(origin, details.url, details.requestHeaders, DESKTOP_SECRET_HEADER, secret) }),
+  );
+}
+
+// Sleep and screen lock: lock the vault, then reload so the decrypted list leaves the page and the unlock screen shows. The session
+// survives a lock, so the reload lands on the unlock screen without a new login.
+function lockOnPowerEvents(): void {
+  const lockAndReload = (): void => {
+    if (server === null) return;
+    server.lock().then(
+      () => {
+        if (window !== null && !window.isDestroyed()) window.webContents.reload();
+      },
+      (err: unknown) => console.error(err),
+    );
+  };
+  powerMonitor.on('suspend', lockAndReload);
+  powerMonitor.on('lock-screen', lockAndReload);
 }
 
 function createWindow(url: string): BrowserWindow {
@@ -95,8 +124,10 @@ app.on('window-all-closed', () => app.quit());
 
 async function main(): Promise<void> {
   await app.whenReady();
-  server = await startServer({ onShutdown: () => app.quit() });
-  lockDown(appOrigin(server.port));
+  const secret = newDesktopSecret();
+  server = await startServer({ desktopSecret: secret, onShutdown: () => app.quit() });
+  lockDown(appOrigin(server.port), secret);
+  lockOnPowerEvents();
   // The packaged app gets its Dock icon from the bundle; a development run shows Electron's until told otherwise.
   if (!app.isPackaged) app.dock?.setIcon(join(import.meta.dirname, '../../build/icon.png'));
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, TITLE)));

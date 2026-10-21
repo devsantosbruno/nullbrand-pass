@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appOrigin, isAllowedRequest, isAppUrl, isExternalLinkAllowed, menuTemplate, webPreferences } from '../security.js';
+import { appOrigin, isAllowedRequest, isAppUrl, isExternalLinkAllowed, menuTemplate, newDesktopSecret, webPreferences, withDesktopSecret } from '../security.js';
 
 const origin = appOrigin(51234);
 
@@ -82,4 +82,27 @@ test('only the project site may be opened in the system browser', () => {
   ]) {
     assert.equal(isExternalLinkAllowed(url), false, url);
   }
+});
+
+test('newDesktopSecret is 256 bits of fresh randomness', () => {
+  const a = newDesktopSecret();
+  assert.match(a, /^[\w-]{43}$/);
+  assert.notEqual(a, newDesktopSecret());
+});
+
+test('the launch secret is added only to requests to the app origin', () => {
+  const add = (url: string, headers: Record<string, string> = {}) => withDesktopSecret(origin, url, headers, 'x-nullbrand-desktop', 'S3CRET');
+  assert.deepEqual(add('http://127.0.0.1:51234/api/status', { Accept: '*/*' }), { Accept: '*/*', 'x-nullbrand-desktop': 'S3CRET' });
+  for (const url of ['https://example.com/', 'http://127.0.0.1:51235/', 'http://localhost:51234/', 'http://127.0.0.1:51234@evil.example/', 'not a url']) {
+    assert.deepEqual(add(url, { Accept: '*/*' }), { Accept: '*/*' }, url);
+  }
+});
+
+test('a header the page set under the secret name is replaced or dropped, never forwarded', () => {
+  const spoofed = { 'X-Nullbrand-Desktop': 'guess', Accept: '*/*' };
+  assert.deepEqual(withDesktopSecret(origin, 'http://127.0.0.1:51234/', spoofed, 'x-nullbrand-desktop', 'S3CRET'), {
+    Accept: '*/*',
+    'x-nullbrand-desktop': 'S3CRET',
+  });
+  assert.deepEqual(withDesktopSecret(origin, 'https://example.com/', spoofed, 'x-nullbrand-desktop', 'S3CRET'), { Accept: '*/*' });
 });
