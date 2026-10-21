@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.0-rc.2] - 2026-10-21
+
+Second release candidate: adds the Intel macOS installer missing from rc.1. Published to npm under the `next` tag only.
+
 ### Fixed
 - The macOS installer is built for both Intel (`x64`) and Apple Silicon (`arm64`) in every build, not only for the architecture of the machine that builds it.
 
