@@ -38,8 +38,8 @@ ${logo()}
 ${t('help.tagline')}
 
 ${c.bold(t('help.usage'))}
-${row('npx nullbrand', 'help.usageUi')}
-  npx nullbrand <command> [options]
+${row('nullbrand', 'help.usageUi')}
+  nullbrand <command> [options]
 
 ${c.bold(t('help.commands'))}
 ${row('ui', 'help.cmd.ui')}

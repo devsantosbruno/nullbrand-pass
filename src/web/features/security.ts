@@ -37,7 +37,7 @@ export function initSecurity(): void {
     document.body.replaceChildren(el('main', { className: 'screen center' },
       el('div', { className: 'card auth' }, el('h1', { textContent: t('quit.doneTitle') }),
         el('p', { className: 'muted' }))));
-    setRich(query(document, 'main p', HTMLElement), 'quit.doneBody', 'npx nullbrand');
+    setRich(query(document, 'main p', HTMLElement), 'quit.doneBody', 'nullbrand');
   });
   $('#btn-open-destroy').addEventListener('click', () => {
     secMenu.close();

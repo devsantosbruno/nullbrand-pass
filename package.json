@@ -1,7 +1,7 @@
 {
   "name": "nullbrand",
   "version": "0.1.0",
-  "description": "100% local, offline password manager with an encrypted vault file (early release, not independently audited). Run it with npx nullbrand.",
+  "description": "100% local, offline password manager with an encrypted vault file (early release, not independently audited).",
   "type": "module",
   "bin": {
     "nullbrand": "dist/bin/nullbrand.js"
