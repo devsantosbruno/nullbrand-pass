@@ -117,13 +117,14 @@ export function initEditor({ folders, generator, ssh, select, renderView, render
   const fNotes = fieldTextarea('notes');
   const fFavorite = fieldInput('favorite');
 
-  function setType(type: string): void {
+  // `newKey` is false when opening a stored item: its key is filled in right after, so generating one here would replace it.
+  function setType(type: string, newKey: boolean = true): void {
     query(form, `input[name="type"][value="${type}"]`, HTMLInputElement).checked = true;
     query(form, '.login-only', HTMLElement).hidden = type !== 'login';
     query(form, '.card-only', HTMLElement).hidden = type !== 'card';
     query(form, '.identity-only', HTMLElement).hidden = type !== 'identity';
     query(form, '.ssh-only', HTMLElement).hidden = type !== 'ssh';
-    if (type === 'ssh') ssh.ensureKey();
+    if (type === 'ssh' && newKey) ssh.ensureKey();
   }
   form.addEventListener('change', (e) => {
     const target = e.target;
@@ -161,7 +162,7 @@ export function initEditor({ folders, generator, ssh, select, renderView, render
     paintEditTitle(item);
     $('#btn-delete').hidden = !item;
     resetSecrets();
-    setType(item?.type || 'login');
+    setType(item?.type || 'login', !item);
     for (const k of PLAIN_FIELDS) fieldInput(k).value = item?.[k] || '';
     fUris.value = item?.uris?.[0] || '';
     folders.setValue(item?.folder || (state.folder || ''));
