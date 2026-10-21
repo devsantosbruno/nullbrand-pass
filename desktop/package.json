@@ -13,7 +13,7 @@
     "build": "npm run build:core && npm run stage && tsc -p tsconfig.json",
     "typecheck": "npm run stage && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "npm run build && tsc -p tsconfig.test.json && node --test dist/test-build/test/*.test.js",
-    "start": "npm run build && node node_modules/electron/install.js && electron dist/app",
+    "start": "npm run build && node node_modules/electron/install.js && node scripts/start.mjs",
     "package": "npm run build && electron-builder --config builder.yml",
     "package:dir": "npm run build && electron-builder --config builder.yml --dir"
   },
