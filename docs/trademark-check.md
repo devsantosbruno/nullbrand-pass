@@ -19,7 +19,7 @@ This is an engineering check, not legal advice. Items marked **Pending** need a 
 | npm `nullbrand-pass` | Not found in the registry (checked 2026-10-21); the name is free | Available. This is the package name (`npx nullbrand-pass`). Publish to hold it (see `docs/releasing.md`, "npm publishing"). |
 | npm `nullbrand` | Not found (2026-10-18) | Available, not used by this package |
 | GitHub user/org `nullbrand` | Not found | Available. Repo today: `devsantosbruno/nullbrand-pass`. |
-| Domain `nullbrand.com` | Registered 2026-07-31, expires 2027-07-31 | Owned by the maintainer. Turn on auto-renew. |
+| Domain `nullbrand.dev` | Registered 2026-07-31, expires 2027-07-31 | Owned by the maintainer. Turn on auto-renew. |
 | Homebrew formula and cask `nullbrand` | Not found | Available |
 | Web search for "nullbrand" with software/password terms | No product or company found | No conflict seen |
 
@@ -44,5 +44,5 @@ Rule: none. No product names in code, UI, CLI, API, locales or docs; no logos, b
 
 1. Run the database searches above and paste the results in this file.
 2. Publish the first version of `nullbrand-pass` to npm to claim the name, and create the `nullbrand` GitHub org if wanted.
-3. Turn on auto-renew for `nullbrand.com`.
+3. Turn on auto-renew for `nullbrand.dev`.
 4. Reassess registration before `1.0` or the first signed installer.

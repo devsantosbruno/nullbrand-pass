@@ -29,4 +29,4 @@ nullbrand is not affiliated with, endorsed by or sponsored by any other password
 
 ## Questions
 
-Open a GitHub Discussion or issue, or use the contact page at <https://nullbrand.com/#contact>.
+Open a GitHub Discussion or issue, or use the contact page at <https://nullbrand.dev/#contact>.
