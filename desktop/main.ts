@@ -7,7 +7,9 @@ import { startServer, type RunningServer } from './core/src/server.js';
 import { windowChrome } from './chrome.js';
 import { appOrigin, isAllowedRequest, isAppUrl, isExternalLinkAllowed, menuTemplate, PARTITION, webPreferences } from './security.js';
 
-const TITLE = 'nullbrand';
+const TITLE = 'nullbrand pass';
+
+app.setName(TITLE);
 
 let server: RunningServer | null = null;
 let window: BrowserWindow | null = null;
@@ -18,7 +20,7 @@ app.enableSandbox();
 
 function fail(err: unknown): never {
   const detail = err instanceof Error ? err.message : String(err);
-  dialog.showErrorBox(TITLE, `nullbrand could not start.\n\n${detail}`);
+  dialog.showErrorBox(TITLE, `${TITLE} could not start.\n\n${detail}`);
   app.exit(1);
   throw err;
 }
@@ -62,6 +64,8 @@ function createWindow(url: string): BrowserWindow {
     webPreferences: webPreferences(join(import.meta.dirname, 'preload.cjs'), !app.isPackaged),
   });
   if (chrome.css) win.webContents.on('dom-ready', () => void win.webContents.insertCSS(chrome.css));
+  // The page's own <title> would replace the window title.
+  win.on('page-title-updated', (event) => event.preventDefault());
   win.once('ready-to-show', () => {
     win.maximize();
     win.show();
@@ -93,6 +97,8 @@ async function main(): Promise<void> {
   await app.whenReady();
   server = await startServer({ onShutdown: () => app.quit() });
   lockDown(appOrigin(server.port));
+  // The packaged app gets its Dock icon from the bundle; a development run shows Electron's until told otherwise.
+  if (!app.isPackaged) app.dock?.setIcon(join(import.meta.dirname, '../../build/icon.png'));
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, TITLE)));
   window = createWindow(server.url);
 }

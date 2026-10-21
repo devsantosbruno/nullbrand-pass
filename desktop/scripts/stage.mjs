@@ -32,7 +32,7 @@ await cp(join(coreDist, 'package.json'), join(core, 'package.json'));
 
 const manifest = {
   name: 'nullbrand',
-  productName: 'nullbrand',
+  productName: 'nullbrand pass',
   version: rootPkg.version,
   description: rootPkg.description,
   author: rootPkg.author,

@@ -2,9 +2,10 @@
 # Everything is relative to this folder. The app comes from dist/app (see scripts/stage.mjs); installers go to dist/release.
 # dist/ is ignored by git. The output is UNSIGNED on purpose: signing and notarization are planned separately.
 appId: dev.nullbrand.pass
-productName: nullbrand
+productName: nullbrand pass
 copyright: Copyright © Bruno Santos
 directories:
+  buildResources: build
   app: dist/app
   output: dist/release
 # <project>-<version>-<os>-<arch>.<ext>: each project's download page finds its files by this pattern (ADR 0001).
