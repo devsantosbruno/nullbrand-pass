@@ -62,7 +62,10 @@ function createWindow(url: string): BrowserWindow {
     webPreferences: webPreferences(join(import.meta.dirname, 'preload.cjs'), !app.isPackaged),
   });
   if (chrome.css) win.webContents.on('dom-ready', () => void win.webContents.insertCSS(chrome.css));
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    win.maximize();
+    win.show();
+  });
   win.on('closed', () => {
     window = null;
   });

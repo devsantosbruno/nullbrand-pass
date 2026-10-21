@@ -12,24 +12,21 @@ export interface WindowChrome {
 const BG_DARK = '#0b0c0d';
 const BG_LIGHT = '#f7f8f9';
 
-// macOS: no title bar, the traffic lights sit on the UI, and the sidebar is the system's translucent "sidebar" material.
-// Chromium treats `-webkit-app-region: drag` as the area that moves the window; interactive elements are excluded from it.
+// macOS: no native title bar. A strip of the page's own background sits above the layout and holds the traffic lights,
+// so nothing overlaps the UI. Chromium treats `-webkit-app-region: drag` as the area that moves the window.
 const MAC_CSS = `
-html, body { background: transparent !important; }
-#screen-setup, #screen-unlock { background: var(--bg); }
-.app .list-pane, .app .detail-pane { background: var(--bg); }
-/* #sidebar: the page's own .sidebar rules come later with the same weight, so a class alone would lose. */
-#sidebar.sidebar { background: transparent; padding-top: 48px; }
-.app.sidebar-collapsed .list-head { padding-left: 32px; }
-body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 38px; z-index: 1; -webkit-app-region: drag; }
-button, a, input, select, textarea, label, summary, [role="menuitem"], [tabindex] { -webkit-app-region: no-drag; }
+html, body { overflow: hidden; }
+body { box-sizing: border-box; padding-top: 38px; }
+/* Injected before the page's sheets, so a bare .app would lose to the page's own height; the narrow layout (<=900px) lets .app grow, so it stays out. */
+@media (min-width: 901px) { html body .app { height: calc(100vh / var(--z) - 38px); } }
+body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 38px; z-index: 1000; background: var(--bg); -webkit-app-region: drag; }
 `;
 
 /** Window options and CSS for `platform`. `dark` is the system's current theme. */
 export function windowChrome(platform: NodeJS.Platform, dark: boolean): WindowChrome {
   if (platform === 'darwin') {
     return {
-      options: { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 }, vibrancy: 'sidebar', backgroundColor: '#00000000' },
+      options: { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 12 }, backgroundColor: dark ? BG_DARK : BG_LIGHT },
       css: MAC_CSS,
     };
   }

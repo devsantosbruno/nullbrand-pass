@@ -2,13 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { windowChrome } from '../chrome.js';
 
-test('macOS gets the integrated title bar, the sidebar material and a drag area that spares the controls', () => {
-  const { options, css } = windowChrome('darwin', true);
-  assert.equal(options.titleBarStyle, 'hiddenInset');
-  assert.equal(options.vibrancy, 'sidebar');
-  assert.match(css, /#sidebar\.sidebar \{ background: transparent; padding-top: 48px/);
-  assert.match(css, /-webkit-app-region: drag/);
-  assert.match(css, /-webkit-app-region: no-drag/);
+test('macOS gets a title strip in the page background above the layout, with the controls on it', () => {
+  const dark = windowChrome('darwin', true);
+  const light = windowChrome('darwin', false);
+  assert.equal(dark.options.titleBarStyle, 'hiddenInset');
+  assert.equal(dark.options.vibrancy, undefined);
+  assert.notEqual(dark.options.backgroundColor, light.options.backgroundColor);
+  assert.match(dark.css, /body \{ box-sizing: border-box; padding-top: 38px/);
+  assert.match(dark.css, /background: var\(--bg\); -webkit-app-region: drag/);
 });
 
 test('Windows and Linux keep the native frame and only match the system theme', () => {
