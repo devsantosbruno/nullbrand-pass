@@ -18,6 +18,15 @@ The threat model is documented in the README ("Security model"). In short, nullb
 
 This project has not had an independent security audit.
 
+### Desktop app
+
+The desktop app (`desktop/`) runs the same local server inside its own process and shows it in one window. Its model, beyond the README table:
+
+- **In scope:** other local users, other processes that can open a TCP connection to `127.0.0.1`, and web pages (including DNS rebinding). Each launch generates a random 256-bit secret kept in the main process only; the server refuses every request without it (403, constant-time comparison, checked before `Host`, `Origin`, the token and the cookie). The window gets the secret from a main-process request hook that replaces any header of the same name and adds it only to requests to the app origin. It is never in an argument, an environment variable, a file, a URL or the page, so it does not show in `ps` or Task Manager.
+- **Out of scope:** malware running as your user. It can read the main process memory, attach a debugger or capture the keyboard, and so reach the secret. The server socket is TCP on loopback, not a Unix socket or named pipe, so the secret (not the socket) is the access control.
+- **Auto-lock:** system sleep and screen lock lock the vault (key zeroed, clipboard cleared) and reload the window to the unlock screen. Closing the window quits the app and locks the vault. Minimizing does not lock; the inactivity timer (15 min) covers it.
+- **Unchanged:** the CLI keeps the browser flow (single-use token in a link, 60 s). That link can appear in the process list while the browser opens.
+
 ## Review status
 
 - **No independent audit.** An independent cryptographic audit is planned only once the project has real usage, and before any `1.0` release. Until then the version stays `0.x`.
