@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest published version of `nullbrand` receives security fixes.
+Only the latest published version of `nullbrand-pass` receives security fixes.
 
 ## Reporting a vulnerability
 
@@ -26,6 +26,15 @@ The desktop app (`desktop/`) runs the same local server inside its own process a
 - **Out of scope:** malware running as your user. It can read the main process memory, attach a debugger or capture the keyboard, and so reach the secret. The server socket is TCP on loopback, not a Unix socket or named pipe, so the secret (not the socket) is the access control.
 - **Auto-lock:** system sleep and screen lock lock the vault (key zeroed, clipboard cleared) and reload the window to the unlock screen. Closing the window quits the app and locks the vault. Minimizing does not lock; the inactivity timer (15 min) covers it.
 - **Unchanged:** the CLI keeps the browser flow (single-use token in a link, 60 s). That link can appear in the process list while the browser opens.
+
+## Release signing and key custody
+
+- **What is signed.** When `SIGN_RELEASES` is on (release notes say so; otherwise the installers are unsigned): macOS installers with an Apple Developer ID certificate (hardened runtime, notarized, stapled); Windows installers with Azure Trusted Signing (timestamped); every release file, Linux ones included, is listed in `SHA256SUMS`, which is signed with Sigstore and attested with build provenance. See `docs/releasing.md`.
+- **Where the keys are.** Only in the `release-signing` GitHub environment, which is limited to version tags and needs a reviewer's approval. They are used by two workflow steps and are never in the repository, in a pull request run, in an artifact or in a log. The Windows signing has no stored secret: Azure trusts the workflow's OIDC identity for that environment only.
+- **npm.** The package is published by the release workflow only, through npm trusted publishing (OIDC, no stored token) with a provenance statement, from the same tarball that `SHA256SUMS` lists, in an `npm` environment with required reviewers. The npm account has two-factor authentication. A compromised npm account or workflow is the main supply-chain risk of `npx`, so pin the version you checked.
+- **Who can use them.** Only maintainers with admin access to the repository can change the environment or its secrets.
+- **Rotation.** The API key at least once a year, the certificate before it expires, and everything immediately after a suspected leak. The steps are in `docs/releasing.md`.
+- **Do not trust an installer that fails verification**, and report one that is signed but was not published here as a vulnerability.
 
 ## Review status
 

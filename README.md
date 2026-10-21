@@ -6,9 +6,17 @@
 
 ## Install
 
-nullbrand is not published to npm. Get it in one of two ways:
+Get it in one of three ways (the CLI needs Node.js 22.14 or newer):
 
-- **Download a release** from [GitHub Releases](https://github.com/devsantosbruno/nullbrand-pass/releases) and [verify it](#how-to-verify-your-download). Desktop installers for macOS, Windows and Linux are planned; until then a release is the packaged CLI, installed with `npm install -g ./nullbrand-X.Y.Z.tgz` (Node.js 22.14 or newer).
+- **From npm.** The package is published from this repository's release workflow with [provenance](https://docs.npmjs.com/generating-provenance-statements), so its npm page links to the exact commit and build. Run it once, or install it:
+
+  ```bash
+  npx nullbrand-pass@X.Y.Z
+  npm install --global nullbrand-pass@X.Y.Z
+  ```
+
+  Pin the version you checked (replace `X.Y.Z`); `npx nullbrand-pass` alone runs whatever is newest. See [How to verify your download](#how-to-verify-your-download).
+- **Download a release** from [GitHub Releases](https://github.com/devsantosbruno/nullbrand-pass/releases) and [verify it](#how-to-verify-your-download). Releases include the desktop installers (macOS `.dmg`, Windows `.exe`, Linux `.AppImage` and `.deb`) and the packaged CLI, installed with `npm install -g ./nullbrand-pass-X.Y.Z.tgz`. Desktop installers are code-signed only when the release notes say so; an unsigned one makes macOS or Windows warn when you open it (macOS: System Settings, Privacy & Security, "Open Anyway"; Windows: "More info", "Run anyway"). Check it against `SHA256SUMS` first.
 - **Clone the repository:**
 
   ```bash
@@ -19,9 +27,9 @@ nullbrand is not published to npm. Get it in one of two ways:
   node dist/bin/nullbrand.js
   ```
 
-  `npm link` in the clone makes the `nullbrand` command available everywhere.
+  `npm link` in the clone makes the `nullbrand-pass` command available everywhere.
 
-Below, `nullbrand` stands for whichever way you run it.
+Below, `nullbrand-pass` stands for whichever way you run it.
 
 The command starts a web interface **on `127.0.0.1` only** and opens your browser. The first time, you create the master password; after that you just unlock.
 
@@ -58,20 +66,20 @@ Limitation: hiding the password as you type relies on a private, undocumented re
 ## CLI usage
 
 ```bash
-nullbrand                     # web interface (default)
-nullbrand init                # creates the vault from the terminal
-nullbrand list [query]        # lists items
-nullbrand get github          # copies the password and clears the clipboard after 30 s (--clear <s>, 0 = never clear)
-nullbrand get github --show   # prints the password
-nullbrand add                 # adds a login
-nullbrand rm github           # removes an item
-nullbrand generate -l 32      # generates a password
-nullbrand import ~/Downloads/passwords.json    # the layout is detected
-nullbrand import backup backup.json
-nullbrand export backup.json                   # encrypted backup
-nullbrand export out.json --unencrypted        # plain text: asks for the master password
-nullbrand passwd              # changes the master password
-nullbrand where               # shows where the vault is stored
+nullbrand-pass                     # web interface (default)
+nullbrand-pass init                # creates the vault from the terminal
+nullbrand-pass list [query]        # lists items
+nullbrand-pass get github          # copies the password and clears the clipboard after 30 s (--clear <s>, 0 = never clear)
+nullbrand-pass get github --show   # prints the password
+nullbrand-pass add                 # adds a login
+nullbrand-pass rm github           # removes an item
+nullbrand-pass generate -l 32      # generates a password
+nullbrand-pass import ~/Downloads/passwords.json    # the layout is detected
+nullbrand-pass import backup backup.json
+nullbrand-pass export backup.json                   # encrypted backup
+nullbrand-pass export out.json --unencrypted        # plain text: asks for the master password
+nullbrand-pass passwd              # changes the master password
+nullbrand-pass where               # shows where the vault is stored
 ```
 
 Web interface options: `--port <n>`, `--idle <min>` (auto-lock on inactivity, default 15; `0` disables it) and `--no-open`.
@@ -89,7 +97,7 @@ Releases are tagged `vX.Y.Z` and listed in [CHANGELOG.md](CHANGELOG.md). nullbra
 
 ## How to verify your download
 
-Every [release](https://github.com/devsantosbruno/nullbrand-pass/releases) ships the tarball, a `SHA256SUMS` file, and `SHA256SUMS.sigstore.json`, a [Sigstore](https://www.sigstore.dev/) signature made by the release workflow itself (no key to manage or trust). Download all three into one folder and replace `X.Y.Z` with the version.
+Every [release](https://github.com/devsantosbruno/nullbrand-pass/releases) ships its files (the tarball and the installers), a `SHA256SUMS` file listing them, and `SHA256SUMS.sigstore.json`, a [Sigstore](https://www.sigstore.dev/) signature made by the release workflow itself (no key to manage or trust). Download the file you want, `SHA256SUMS` and the signature into one folder and replace `X.Y.Z` with the version.
 
 1. **Check the signature** (needs [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) 2.x). It proves `SHA256SUMS` was produced by this repository's release workflow for that tag:
 
@@ -107,13 +115,15 @@ Every [release](https://github.com/devsantosbruno/nullbrand-pass/releases) ships
    shasum -a 256 --check --ignore-missing SHA256SUMS  # macOS
    ```
 
-   On Windows (PowerShell), compare `(Get-FileHash nullbrand-X.Y.Z.tgz).Hash` with the line in `SHA256SUMS` (case-insensitive).
+   On Windows (PowerShell), compare `(Get-FileHash nullbrand-pass-X.Y.Z.tgz).Hash` with the line in `SHA256SUMS` (case-insensitive).
 
 3. **Optional, build provenance** (needs the [GitHub CLI](https://cli.github.com/)):
 
    ```bash
-   gh attestation verify nullbrand-X.Y.Z.tgz --repo devsantosbruno/nullbrand-pass
+   gh attestation verify nullbrand-pass-X.Y.Z.tgz --repo devsantosbruno/nullbrand-pass
    ```
+
+**The npm package** is the same tarball that `SHA256SUMS` lists. To check what npm served you, run `npm pack nullbrand-pass@X.Y.Z` and compare the `.tgz` with its line in `SHA256SUMS`, and run `npm audit signatures` in a project that depends on it to verify the registry signature and the provenance statement.
 
 Do not run anything from a download that fails one of these checks.
 
@@ -122,9 +132,9 @@ Do not run anything from a download that fails one of these checks.
 Both use a `.json` file and say nothing about which app wrote or will read it.
 
 ```bash
-nullbrand import file.json                    # the layout is detected
-nullbrand import file.json --folder Imported  # everything goes into the folder "Imported"
-nullbrand import file.json --ignore-folders   # drop the folders written in the file
+nullbrand-pass import file.json                    # the layout is detected
+nullbrand-pass import file.json --folder Imported  # everything goes into the folder "Imported"
+nullbrand-pass import file.json --ignore-folders   # drop the folders written in the file
 ```
 
 - **Detection.** The layout of the file is recognised from its structure, never from a name. A file that no layout is sure about fails with "not in a supported format": it is never guessed. An encrypted export from another app is refused with a message to export it again unencrypted.
@@ -147,7 +157,7 @@ Only `.json` is read. Other formats and encrypted databases are not supported: t
 
 ## Language
 
-nullbrand speaks English (`en`) and Portuguese (`pt`). The language is picked from the first of these that has a valid value:
+nullbrand-pass speaks English (`en`) and Portuguese (`pt`). The language is picked from the first of these that has a valid value:
 
 1. `--lang en` or `--lang pt` on the command line
 2. the `NULLBRAND_LANG` environment variable
@@ -158,8 +168,8 @@ nullbrand speaks English (`en`) and Portuguese (`pt`). The language is picked fr
 An invalid value is skipped and the next level is used. For the flag and the variable, a short warning is printed to the terminal.
 
 ```bash
-nullbrand --lang pt
-NULLBRAND_LANG=pt nullbrand get github
+nullbrand-pass --lang pt
+NULLBRAND_LANG=pt nullbrand-pass get github
 ```
 
 **Where the choice is saved.** The EN | PT switch in the web interface (also on the unlock screen) writes `{ "lang": "pt" }` to `config.json` in the data folder (`~/.nullbrand/config.json`, or `$NULLBRAND_HOME/config.json`). The file sits outside the encrypted vault so the unlock screen can open in the right language before the master password is typed. It is created only when you pick a language: an auto-detected language is never written. Other fields in the file are kept. `--vault` does not move it.

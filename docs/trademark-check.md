@@ -10,14 +10,14 @@ This is an engineering check, not legal advice. Items marked **Pending** need a 
 - **Official trademark databases are still unchecked.** USPTO, EUIPO and INPI Brazil must be searched by hand before the first signed installer (spec 09). Until then the name is used as an unregistered mark with no clearance.
 - **Decision: do not register the mark yet.** Reassess before `1.0` or before the first signed installer, whichever comes first. Usage rules for forks are in [TRADEMARKS.md](../TRADEMARKS.md).
 - **Third-party names.** The project names no other product: positioning wording and the matching npm keyword were removed, and import is by file structure (spec 04). The non-affiliation disclaimer stays in the README.
-- **Distribution:** the desktop app, when it exists, will be a free download from the project site. It will not be listed in app stores or package managers, so store identifiers (reverse-DNS app ID, Flathub, winget) are out of scope.
+- **Distribution:** the desktop app, when it exists, will be a free download from the project site and GitHub Releases, and the CLI is published to npm. It will not be listed in app stores or other package managers, so store identifiers (reverse-DNS app ID, Flathub, winget) are out of scope.
 
 ## Name availability
 
 | Place | Result (2026-10-18) | Status |
 | --- | --- | --- |
-| npm `nullbrand` | Not found in the registry (unpublished); the name is free | Available. Publish `0.1.0` to hold it. |
-| npm `nullbrand-pass` | Not found | Available |
+| npm `nullbrand-pass` | Not found in the registry (checked 2026-10-21); the name is free | Available. This is the package name (`npx nullbrand-pass`). Publish to hold it (see `docs/releasing.md`, "npm publishing"). |
+| npm `nullbrand` | Not found (2026-10-18) | Available, not used by this package |
 | GitHub user/org `nullbrand` | Not found | Available. Repo today: `devsantosbruno/nullbrand-pass`. |
 | Domain `nullbrand.com` | Registered 2026-07-31, expires 2027-07-31 | Owned by the maintainer. Turn on auto-renew. |
 | Homebrew formula and cask `nullbrand` | Not found | Available |
@@ -43,6 +43,6 @@ Rule: none. No product names in code, UI, CLI, API, locales or docs; no logos, b
 ## Pending actions for the maintainer
 
 1. Run the database searches above and paste the results in this file.
-2. Publish `0.1.0` to npm to claim the name, and create the `nullbrand` GitHub org if wanted.
+2. Publish the first version of `nullbrand-pass` to npm to claim the name, and create the `nullbrand` GitHub org if wanted.
 3. Turn on auto-renew for `nullbrand.com`.
 4. Reassess registration before `1.0` or the first signed installer.
