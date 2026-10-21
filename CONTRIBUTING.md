@@ -32,6 +32,8 @@ npm start           # builds, then opens the app (downloads the Electron binary 
 npm run package     # unsigned installer for the host OS in desktop/dist/release
 ```
 
+From the repository root, `npm run app:start` does the same as `npm start` here (after a one-time `npm ci` in `desktop/`).
+
 The decision and the hardening it requires are in [docs/adr/0001-desktop-packaging.md](docs/adr/0001-desktop-packaging.md). Keep `contextIsolation`, `sandbox` and the navigation and request filters intact; `desktop/test/security.test.ts` pins them. When you try the app, set `NULLBRAND_HOME` to a scratch folder so your real vault is not touched.
 
 ## Changelog and releases
