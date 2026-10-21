@@ -12,8 +12,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  guard:
+    name: tag, version and changelog
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tag must point at a commit on main
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+      - name: Tag, package version and changelog agree
+        env:
+          TAG: ${{ github.ref_name }}
+        run: node scripts/release-notes.mjs "$TAG" > /dev/null
+
   verify:
     name: verify / ${{ matrix.os }}
+    needs: guard
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -30,36 +52,181 @@ jobs:
       - run: npm ci
       - run: npm run verify
 
+  # The three package jobs build the desktop installers. Signing is switched on by the repository variable SIGN_RELEASES=true. Then the
+  # macOS and Windows jobs run in the "release-signing" environment, which holds the credentials (restrict it to version tags and add
+  # required reviewers, see docs/releasing.md), and any missing credential fails the release. Otherwise they build unsigned installers
+  # in "release-unsigned", which holds nothing. Credentials are only in the steps that need them, never in the whole job.
+  package-linux:
+    name: package / linux
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+      - run: npm ci
+      - run: npm ci --prefix desktop
+      - run: npm run package:release --prefix desktop
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installers-linux
+          path: |
+            desktop/dist/release/*.AppImage
+            desktop/dist/release/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  package-macos:
+    name: package / macos (sign and notarize)
+    needs: verify
+    runs-on: macos-latest
+    environment: ${{ vars.SIGN_RELEASES == 'true' && 'release-signing' || 'release-unsigned' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+      - run: npm ci
+      - run: npm ci --prefix desktop
+      - name: Check the signing configuration is complete
+        if: vars.SIGN_RELEASES == 'true'
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          MAC_SIGNING_IDENTITY: ${{ vars.MAC_SIGNING_IDENTITY }}
+        run: |
+          missing=0
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER MAC_SIGNING_IDENTITY; do
+            if [ -z "${!name}" ]; then echo "::error::$name is not set"; missing=1; fi
+          done
+          exit "$missing"
+      - name: Write the App Store Connect API key
+        if: vars.SIGN_RELEASES == 'true'
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          umask 077
+          printf '%s' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+      - name: Package, sign and notarize
+        if: vars.SIGN_RELEASES == 'true'
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          MAC_SIGNING_IDENTITY: ${{ vars.MAC_SIGNING_IDENTITY }}
+        run: npm run package:release --prefix desktop
+      - name: Remove the App Store Connect API key
+        if: always() && vars.SIGN_RELEASES == 'true'
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
+      - name: Verify signature, hardened runtime, notarization and staple
+        if: vars.SIGN_RELEASES == 'true'
+        run: node desktop/scripts/verify-signatures.mjs
+      - name: Package (unsigned)
+        if: vars.SIGN_RELEASES != 'true'
+        run: npm run package --prefix desktop
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installers-macos
+          path: desktop/dist/release/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+
+  package-windows:
+    name: package / windows (sign)
+    needs: verify
+    runs-on: windows-latest
+    environment: ${{ vars.SIGN_RELEASES == 'true' && 'release-signing' || 'release-unsigned' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+      - run: npm ci
+      - run: npm ci --prefix desktop
+      # OIDC: Azure trusts this workflow's identity, so no certificate or client secret is stored in GitHub.
+      - uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        if: vars.SIGN_RELEASES == 'true'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Package and sign
+        if: vars.SIGN_RELEASES == 'true'
+        env:
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          AZURE_TRUSTED_SIGNING_PROFILE: ${{ vars.AZURE_TRUSTED_SIGNING_PROFILE }}
+          WIN_PUBLISHER_NAME: ${{ vars.WIN_PUBLISHER_NAME }}
+        run: npm run package:release --prefix desktop
+      - name: Verify the signatures
+        if: vars.SIGN_RELEASES == 'true'
+        env:
+          WIN_PUBLISHER_NAME: ${{ vars.WIN_PUBLISHER_NAME }}
+        run: node desktop/scripts/verify-signatures.mjs
+      - name: Package (unsigned)
+        if: vars.SIGN_RELEASES != 'true'
+        run: npm run package --prefix desktop
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installers-windows
+          path: desktop/dist/release/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
   build:
     name: build and checksum
-    needs: verify
+    needs: [verify, package-linux, package-macos, package-windows]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          fetch-depth: 0
           persist-credentials: false
-      - name: Tag must point at a commit on main
-        run: |
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: lts/*
-      - name: Tag, package version and changelog agree
+      - name: Release notes from the changelog
         env:
           TAG: ${{ github.ref_name }}
+          SIGN_RELEASES: ${{ vars.SIGN_RELEASES }}
         run: |
           mkdir release
           node scripts/release-notes.mjs "$TAG" > release/NOTES.md
+          if [ "$SIGN_RELEASES" != "true" ]; then
+            printf '\n---\n\nThe macOS and Windows installers in this release are **not code-signed**, so the system will warn when you open them. Verify them with `SHA256SUMS` (see the README) and use the npm package if you prefer.\n' >> release/NOTES.md
+          fi
       - run: npm ci
       - run: npm run verify
+      # Only the files the package jobs verified and uploaded: signed installers are checksummed as they are, never rebuilt here.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: installers-*
+          path: installers
+          merge-multiple: true
       - name: Pack and checksum
         run: |
           npm pack --ignore-scripts --pack-destination release
+          mv installers/* release/
           cd release
-          sha256sum -- *.tgz > SHA256SUMS
+          LC_ALL=C sha256sum -- *.tgz *.dmg *.exe *.AppImage *.deb > SHA256SUMS
           cat SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -90,7 +257,7 @@ jobs:
           cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          subject-path: release/*.tgz
+          subject-checksums: release/SHA256SUMS
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -98,5 +265,37 @@ jobs:
         run: |
           flags=()
           case "$TAG" in *-*) flags+=(--prerelease) ;; esac
-          gh release create "$TAG" release/*.tgz release/SHA256SUMS release/SHA256SUMS.sigstore.json \
+          gh release create "$TAG" release/*.tgz release/*.dmg release/*.exe release/*.AppImage release/*.deb release/SHA256SUMS release/SHA256SUMS.sigstore.json \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --notes-file release/NOTES.md "${flags[@]}"
+
+  # Last and separate on purpose: a publish to npm cannot be undone, so it runs only after the release, with its signed checksums, exists.
+  # It publishes the very tarball that was checksummed. No npm token is stored: npm trusts this workflow through OIDC ("trusted
+  # publishing", configured on npmjs.com), and the package gets a provenance statement.
+  publish-npm:
+    name: publish to npm
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: npm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release
+          path: release
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+      # Trusted publishing needs npm 11.5.1 or newer; the npm bundled with Node 22 is older.
+      - run: npm install --global npm@11.21.1
+      - name: Publish the checksummed tarball with provenance
+        working-directory: release
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          sha256sum --check --ignore-missing SHA256SUMS
+          dist_tag=latest
+          case "$TAG" in *-*) dist_tag=next ;; esac
+          npm publish --provenance --access public --tag "$dist_tag" -- "nullbrand-pass-${TAG#v}.tgz"
