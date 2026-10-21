@@ -45,16 +45,16 @@ A failure before step 6 publishes nothing. Fix the problem, delete the tag (`git
 The workflow publishes with npm [trusted publishing](https://docs.npmjs.com/trusted-publishers): npm trusts this workflow through OIDC, so there is no npm token in GitHub, and every version carries a provenance statement. One-time setup, in this order:
 
 1. Turn on two-factor authentication (authorization and publishing) for the npm account that owns the package.
-2. Publish the first version by hand, because a trusted publisher can only be added to a package that exists: `npm pack` and `npm publish --access public nullbrand-pass-X.Y.Z.tgz` from a clean checkout of the tag. (This also holds the name, see `docs/trademark-check.md`.)
+2. Publish the first version by hand, because a trusted publisher can only be added to a package that exists. Do not burn a version for it: push the first tag as usual, let the workflow build and create the GitHub release, then **reject** the pending `publish-npm` run (it waits for the `npm` environment reviewer). Download `nullbrand-pass-X.Y.Z.tgz` and `SHA256SUMS` from that release, check them (README, "How to verify your download"), and run `npm publish --access public ./nullbrand-pass-X.Y.Z.tgz` with two-factor authentication. It is the very tarball that was checksummed; only this first version lacks the npm provenance statement. (This also holds the name, see `docs/trademark-check.md`.)
 3. On npmjs.com, open the package, Settings, Trusted Publisher, GitHub Actions, and enter the repository `devsantosbruno/nullbrand-pass`, the workflow `release.yml` and the environment `npm`.
-4. Create the GitHub environment `npm` (Settings, Environments), limit it to `v*` tags and add required reviewers. It holds no secret.
+4. The GitHub environment `npm` (Settings, Environments) is limited to `v*` tags and has a required reviewer, so every publish needs an approval click. It holds no secret.
 5. Optionally, in the package settings, require two-factor authentication and disallow tokens, so only the workflow can publish.
 
 The next tag publishes through the workflow. Revoking access is removing the trusted publisher in the package settings.
 
 ## Code signing
 
-Signing is **optional and explicit**. Set the repository variable `SIGN_RELEASES` to `true` (Settings, Secrets and variables, Actions, Variables) to sign: macOS and Windows installers are then signed in the release workflow and any missing credential fails the release. Without it (the default) the installers are built unsigned, the release notes say so, and nothing here needs an account. Local builds (`npm run package` in `desktop/`) always stay unsigned. `desktop/builder.release.mjs` sets `forceCodeSigning`, so a missing credential stops the build instead of producing an unsigned file, and `desktop/scripts/verify-signatures.mjs` then checks the result before anything is uploaded.
+Signing is **optional and explicit**, and it is off by default because the Apple Developer program and Azure Trusted Signing are paid services. Everything else in the release path (GitHub Actions, Releases, Sigstore, npm trusted publishing, CodeQL, Dependabot) is free for a public repository. Set the repository variable `SIGN_RELEASES` to `true` (Settings, Secrets and variables, Actions, Variables) to sign: macOS and Windows installers are then signed in the release workflow and any missing credential fails the release. Without it (the default) the installers are built unsigned, the release notes say so, and nothing here needs an account. Local builds (`npm run package` in `desktop/`) always stay unsigned. `desktop/builder.release.mjs` sets `forceCodeSigning`, so a missing credential stops the build instead of producing an unsigned file, and `desktop/scripts/verify-signatures.mjs` then checks the result before anything is uploaded.
 
 | Platform | Signing | Checked by `verify-signatures.mjs` |
 | --- | --- | --- |
