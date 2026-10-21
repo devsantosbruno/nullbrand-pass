@@ -20,6 +20,9 @@ import type { VaultItem } from './shared/vault-types.js';
 import type { ApiErrorResponse, ApiResponses, ApiRoute, ImportPreviewResponse, ImportResponse, PublicItem } from './shared/api.js';
 
 const BOOTSTRAP_TTL_MS = 60_000;
+/** Request header that carries the per-launch secret when the server is embedded in the desktop shell. */
+export const DESKTOP_SECRET_HEADER = 'x-nullbrand-desktop';
+const MIN_DESKTOP_SECRET_LENGTH = 32;
 const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -109,6 +112,11 @@ export interface ServerOptions {
   host?: string;
   idleMinutes?: number;
   token?: string;
+  /**
+   * Per-launch secret of an embedding desktop shell. When set, every request (including `/auth`) must carry it in
+   * {@link DESKTOP_SECRET_HEADER}, or it is refused with 403 before anything else is looked at. Unset for the CLI.
+   */
+  desktopSecret?: string;
   bootstrapTtlMs?: number;
   onShutdown?: () => void;
   clipboardTtlMs?: number;
@@ -121,6 +129,8 @@ export interface RunningServer {
   port: number;
   token: string;
   url: string;
+  /** Locks the vault (zeroes the key, clears the clipboard) but keeps the session, like POST /api/lock. */
+  lock: () => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -134,6 +144,7 @@ export function startServer({
   host = '127.0.0.1',
   idleMinutes = 15,
   token = randomToken(32),
+  desktopSecret,
   bootstrapTtlMs = BOOTSTRAP_TTL_MS,
   onShutdown = () => {},
   clipboardTtlMs = DEFAULT_TTL_MS,
@@ -143,6 +154,9 @@ export function startServer({
 }: ServerOptions = {}): Promise<RunningServer> {
   if (!['127.0.0.1', 'localhost', '::1'].includes(host)) {
     throw new Error('For safety, nullbrand only listens on 127.0.0.1.');
+  }
+  if (desktopSecret !== undefined && desktopSecret.length < MIN_DESKTOP_SECRET_LENGTH) {
+    throw new Error(`The desktop secret must be at least ${MIN_DESKTOP_SECRET_LENGTH} characters.`);
   }
   // Never 0.0.0.0 or ::, even when the caller asked for "localhost".
   host = '127.0.0.1';
@@ -225,6 +239,14 @@ export function startServer({
       ...extra,
     });
     res.end(isBuffer ? body : JSON.stringify(body));
+  }
+
+  // Desktop mode only: a process that does not hold the launch secret (another local user, a script, a regular browser) is refused
+  // on every route. A web page cannot add the header cross-origin because the server sends no CORS headers.
+  function checkDesktopSecret(req: IncomingMessage): void {
+    if (desktopSecret === undefined) return;
+    const given = req.headers[DESKTOP_SECRET_HEADER];
+    if (typeof given !== 'string' || !safeEqual(given, desktopSecret)) throw new HttpError(403, 'Access denied.', 'err.http.accessDenied');
   }
 
   // Runs before any route: Host blocks DNS rebinding, Origin blocks CSRF. No CORS header is ever sent, so other origins cannot read responses.
@@ -613,6 +635,7 @@ export function startServer({
 
   const server = createHttpServer(async (req, res) => {
     try {
+      checkDesktopSecret(req);
       checkHostAndOrigin(req);
       const url = new URL(req.url, `http://${req.headers.host}`);
       if (url.pathname === '/auth') {
@@ -666,6 +689,9 @@ export function startServer({
         port: actualPort,
         token,
         url: `http://127.0.0.1:${actualPort}/auth?t=${token}`,
+        lock: async () => {
+          await lock();
+        },
         close: async () => {
           await lock(true);
           return new Promise((r) => {
