@@ -1,6 +1,6 @@
 # electron-builder configuration. Run through `npm run package` (installer for the host OS) or `npm run package:dir` (unpacked app).
 # Everything is relative to this folder. The app comes from dist/app (see scripts/stage.mjs); installers go to dist/release.
-# dist/ is ignored by git. The output is UNSIGNED on purpose: signing and notarization are planned separately.
+# dist/ is ignored by git. This configuration is UNSIGNED on purpose (local builds); releases use builder.release.yml, which signs.
 appId: dev.nullbrand.pass
 productName: nullbrand pass
 copyright: Copyright © Bruno Santos
@@ -34,7 +34,7 @@ electronFuses:
 mac:
   target: dmg
   category: public.app-category.utilities
-  # null: never pick up a certificate from the keychain by accident. Signing is planned separately.
+  # null: never pick up a certificate from the keychain by accident. Release signing is in builder.release.yml.
   identity: null
 win:
   target: nsis
