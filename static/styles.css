@@ -491,9 +491,9 @@ input[type="file"] {
   .app.sidebar-collapsed .folder-edit {
     display: none;
   }
-  .app.sidebar-collapsed .folders-head {
-    justify-content: center;
-    margin: 12px 0 4px;
+  .app.sidebar-collapsed .folders-head,
+  .app.sidebar-collapsed .folders-empty {
+    display: none;
   }
 }
 .sidebar-toggle {
@@ -630,7 +630,7 @@ input[type="file"] {
   font-size: 12px;
   color: var(--muted);
 }
-.fcount {
+.fidx {
   flex: none;
   min-width: 16px;
   text-align: center;

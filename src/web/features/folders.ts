@@ -79,9 +79,8 @@ export function initFolders({ renderList, refresh }: FoldersDeps): FoldersHandle
     nav.replaceChildren();
     const list = state.folders;
     if (list.length === 0) nav.append(el('p', { className: 'muted small folders-empty', textContent: t('folders.none') }));
-    for (const f of list) {
-      const n = state.items.filter((i) => i.folder === f).length;
-      const btn = el('button', { className: `folder${state.folder === f ? ' active' : ''}`, title: f }, el('span', { className: 'lbl' }, el('span', { className: 'fcount', textContent: n }), el('span', { className: 't', textContent: f })));
+    for (const [idx, f] of list.entries()) {
+      const btn = el('button', { className: `folder${state.folder === f ? ' active' : ''}`, title: f }, el('span', { className: 'lbl' }, el('span', { className: 'fidx', textContent: idx + 1 }), el('span', { className: 't', textContent: f })));
       btn.addEventListener('click', () => { state.folder = f; state.filter = 'all'; renderSidebar(); renderList(); });
       const edit = el('button', { className: 'folder-edit', type: 'button', title: t('folder.editAria', { name: f }) }, icon('pen', { size: 14, strokeWidth: 2 }));
       edit.setAttribute('aria-label', t('folder.editAria', { name: f }));
