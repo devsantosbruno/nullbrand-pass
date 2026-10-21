@@ -181,6 +181,14 @@ textarea[aria-invalid='true'] {
 .brand .dim {
   color: var(--muted);
 }
+.brand .mark {
+  width: 1.15em;
+  height: 1.15em;
+  align-self: center;
+  background: var(--text);
+  -webkit-mask: url("/logo-mark.svg") center / contain no-repeat;
+  mask: url("/logo-mark.svg") center / contain no-repeat;
+}
 .auth .brand::after {
   content: "";
   width: 0.55em;
@@ -200,10 +208,12 @@ textarea[aria-invalid='true'] {
   }
 }
 .prompt-big {
-  font-family: var(--mono);
-  font-size: 56px;
-  line-height: 1;
-  color: var(--line-strong);
+  display: block;
+  width: 56px;
+  height: 56px;
+  background: var(--line-strong);
+  -webkit-mask: url("/logo-mark.svg") center / contain no-repeat;
+  mask: url("/logo-mark.svg") center / contain no-repeat;
 }
 
 label {
