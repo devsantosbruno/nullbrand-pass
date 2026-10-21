@@ -26,6 +26,11 @@ All notable changes to this project are documented here. The format follows [Kee
 - Removed wording that positioned the project against another product, and the matching npm keyword.
 - The code base is TypeScript, compiled to `dist/`, with typed API payloads and runtime guards.
 
+### Fixed
+- Editing a stored SSH key item no longer generates a new key that replaces the stored one in the form.
+- Locking the vault (button, idle lock, session end) now clears the edit form, so a password, card number or SSH private key typed or loaded there does not stay in the page.
+- The test suite passes on Windows checkouts with CRLF line endings; `.gitattributes` keeps LF on every OS.
+
 ### Removed
 - The import command, route and subpath that named a specific source; use `import <file.json>` and `POST /api/import`.
 
