@@ -46,7 +46,7 @@
   "author": "Bruno Santos (https://github.com/devsantosbruno)",
   "license": "MIT",
   "devDependencies": {
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   },
   "repository": {
     "type": "git",
