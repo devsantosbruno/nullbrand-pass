@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDirs": ["."],
+    "outDir": "dist/test-build"
+  },
+  // Only the Electron-free modules: the tests run on plain Node.
+  "include": ["security.ts", "chrome.ts", "test/**/*.ts"]
+}

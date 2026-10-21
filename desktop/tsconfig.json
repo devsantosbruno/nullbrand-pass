@@ -1,0 +1,19 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    // Electron's own typings reference DOM types; the main process has no DOM, so third-party declarations are not re-checked.
+    "skipLibCheck": true,
+    "composite": false,
+    "declaration": false,
+    "rootDir": ".",
+    // main.ts imports './core/...', which scripts/stage.mjs copies next to the compiled output (dist/app/core). rootDirs lets the
+    // type checker find it there while the source lives in this folder; at run time the import is a plain relative one.
+    "rootDirs": [".", "dist/app"],
+    "outDir": "dist/app"
+  },
+  "include": ["main.ts", "security.ts", "chrome.ts", "preload.cts"]
+}

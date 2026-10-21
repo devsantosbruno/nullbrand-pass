@@ -1,0 +1,49 @@
+# electron-builder configuration. Run through `npm run package` (installer for the host OS) or `npm run package:dir` (unpacked app).
+# Everything is relative to this folder. The app comes from dist/app (see scripts/stage.mjs); installers go to dist/release.
+# dist/ is ignored by git. The output is UNSIGNED on purpose: signing and notarization are planned separately.
+appId: dev.nullbrand.pass
+productName: nullbrand
+copyright: Copyright © Bruno Santos
+directories:
+  app: dist/app
+  output: dist/release
+# <project>-<version>-<os>-<arch>.<ext>: each project's download page finds its files by this pattern (ADR 0001).
+artifactName: nullbrand-pass-${version}-${os}-${arch}.${ext}
+asar: true
+npmRebuild: false
+# The type declarations only exist for the type checker.
+files:
+  - '**/*'
+  - '!**/*.d.ts'
+  - '!**/*.map'
+forceCodeSigning: false
+
+# Fuses are flipped in the packaged Electron binary: they turn off the ways a local process could make the app run other code.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
+  # Flipping fuses breaks the ad-hoc signature of the arm64 macOS binary and the system then kills the app. Unsigned builds need it
+  # re-created; it does not replace real signing.
+  resetAdHocDarwinSignature: true
+
+mac:
+  target: dmg
+  category: public.app-category.utilities
+  # null: never pick up a certificate from the keychain by accident. Signing is planned separately.
+  identity: null
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+  maintainer: Bruno Santos
