@@ -21,6 +21,10 @@ Requires Node.js 22.14 or newer.
 - **Commits** follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `test:`...).
 - **Sign off** your commits (`git commit -s`, Developer Certificate of Origin).
 
+## Changelog and releases
+
+User-visible changes go under `[Unreleased]` in `CHANGELOG.md` ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)). Versions follow [Semantic Versioning](https://semver.org/) and stay `0.x` until an independent audit. Maintainers: see [docs/releasing.md](docs/releasing.md).
+
 ## Adding a language
 
 Add `locales/<code>.json` with the same keys and placeholders as `en.json`, and register the code in `SUPPORTED` in `src/shared/i18n.ts`.

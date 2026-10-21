@@ -2,11 +2,26 @@
 
 **100% local** password manager. No account, no cloud, no external server: the vault is an encrypted file on your computer.
 
-```bash
-npx nullbrand
-```
-
 > **Status: new project, no independent security audit.** It is open source (MIT) and provided "as is", without warranty. For critical data, keep encrypted backups and consider an established, audited password manager. Not affiliated with or endorsed by any other password manager.
+
+## Install
+
+nullbrand is not published to npm. Get it in one of two ways:
+
+- **Download a release** from [GitHub Releases](https://github.com/devsantosbruno/nullbrand-pass/releases) and [verify it](#how-to-verify-your-download). Desktop installers for macOS, Windows and Linux are planned; until then a release is the packaged CLI, installed with `npm install -g ./nullbrand-X.Y.Z.tgz` (Node.js 22.14 or newer).
+- **Clone the repository:**
+
+  ```bash
+  git clone https://github.com/devsantosbruno/nullbrand-pass.git
+  cd nullbrand-pass
+  npm ci
+  npm run build
+  node dist/bin/nullbrand.js
+  ```
+
+  `npm link` in the clone makes the `nullbrand` command available everywhere.
+
+Below, `nullbrand` stands for whichever way you run it.
 
 The command starts a web interface **on `127.0.0.1` only** and opens your browser. The first time, you create the master password; after that you just unlock.
 
@@ -43,20 +58,20 @@ Limitation: hiding the password as you type relies on a private, undocumented re
 ## CLI usage
 
 ```bash
-npx nullbrand                     # web interface (default)
-npx nullbrand init                # creates the vault from the terminal
-npx nullbrand list [query]        # lists items
-npx nullbrand get github          # copies the password and clears the clipboard after 30 s (--clear <s>, 0 = never clear)
-npx nullbrand get github --show   # prints the password
-npx nullbrand add                 # adds a login
-npx nullbrand rm github           # removes an item
-npx nullbrand generate -l 32      # generates a password
-npx nullbrand import ~/Downloads/passwords.json    # the layout is detected
-npx nullbrand import backup backup.json
-npx nullbrand export backup.json                   # encrypted backup
-npx nullbrand export out.json --unencrypted        # plain text: asks for the master password
-npx nullbrand passwd              # changes the master password
-npx nullbrand where               # shows where the vault is stored
+nullbrand                     # web interface (default)
+nullbrand init                # creates the vault from the terminal
+nullbrand list [query]        # lists items
+nullbrand get github          # copies the password and clears the clipboard after 30 s (--clear <s>, 0 = never clear)
+nullbrand get github --show   # prints the password
+nullbrand add                 # adds a login
+nullbrand rm github           # removes an item
+nullbrand generate -l 32      # generates a password
+nullbrand import ~/Downloads/passwords.json    # the layout is detected
+nullbrand import backup backup.json
+nullbrand export backup.json                   # encrypted backup
+nullbrand export out.json --unencrypted        # plain text: asks for the master password
+nullbrand passwd              # changes the master password
+nullbrand where               # shows where the vault is stored
 ```
 
 Web interface options: `--port <n>`, `--idle <min>` (auto-lock on inactivity, default 15; `0` disables it) and `--no-open`.
@@ -70,18 +85,46 @@ Command-line flags:
 - An unknown option (a typo such as `--prot`) prints a warning on stderr and is ignored; the command still runs.
 - `--no-<option>` turns a switch off (`--no-open`, `--no-digits`). On options that take a value it sets `false`, which only `--no-clear` gives a meaning to (0 = never clear); the others behave as if the option was not given.
 
-To install permanently: `npm install -g nullbrand` and just use `nullbrand`.
+Releases are tagged `vX.Y.Z` and listed in [CHANGELOG.md](CHANGELOG.md). nullbrand never checks for updates: to update, download the new release and [verify it](#how-to-verify-your-download). The versioning and release process is in [docs/releasing.md](docs/releasing.md).
 
-Releases are tagged `vX.Y.Z` and listed in [CHANGELOG.md](CHANGELOG.md). nullbrand never checks for updates.
+## How to verify your download
+
+Every [release](https://github.com/devsantosbruno/nullbrand-pass/releases) ships the tarball, a `SHA256SUMS` file, and `SHA256SUMS.sigstore.json`, a [Sigstore](https://www.sigstore.dev/) signature made by the release workflow itself (no key to manage or trust). Download all three into one folder and replace `X.Y.Z` with the version.
+
+1. **Check the signature** (needs [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) 2.x). It proves `SHA256SUMS` was produced by this repository's release workflow for that tag:
+
+   ```bash
+   cosign verify-blob SHA256SUMS \
+     --bundle SHA256SUMS.sigstore.json \
+     --certificate-identity "https://github.com/devsantosbruno/nullbrand-pass/.github/workflows/release.yml@refs/tags/vX.Y.Z" \
+     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+   ```
+
+2. **Check the file against the checksums:**
+
+   ```bash
+   sha256sum --check --ignore-missing SHA256SUMS      # Linux
+   shasum -a 256 --check --ignore-missing SHA256SUMS  # macOS
+   ```
+
+   On Windows (PowerShell), compare `(Get-FileHash nullbrand-X.Y.Z.tgz).Hash` with the line in `SHA256SUMS` (case-insensitive).
+
+3. **Optional, build provenance** (needs the [GitHub CLI](https://cli.github.com/)):
+
+   ```bash
+   gh attestation verify nullbrand-X.Y.Z.tgz --repo devsantosbruno/nullbrand-pass
+   ```
+
+Do not run anything from a download that fails one of these checks.
 
 ## Import and export
 
 Both use a `.json` file and say nothing about which app wrote or will read it.
 
 ```bash
-npx nullbrand import file.json                    # the layout is detected
-npx nullbrand import file.json --folder Imported  # everything goes into the folder "Imported"
-npx nullbrand import file.json --ignore-folders   # drop the folders written in the file
+nullbrand import file.json                    # the layout is detected
+nullbrand import file.json --folder Imported  # everything goes into the folder "Imported"
+nullbrand import file.json --ignore-folders   # drop the folders written in the file
 ```
 
 - **Detection.** The layout of the file is recognised from its structure, never from a name. A file that no layout is sure about fails with "not in a supported format": it is never guessed. An encrypted export from another app is refused with a message to export it again unencrypted.
@@ -115,8 +158,8 @@ nullbrand speaks English (`en`) and Portuguese (`pt`). The language is picked fr
 An invalid value is skipped and the next level is used. For the flag and the variable, a short warning is printed to the terminal.
 
 ```bash
-npx nullbrand --lang pt
-NULLBRAND_LANG=pt npx nullbrand get github
+nullbrand --lang pt
+NULLBRAND_LANG=pt nullbrand get github
 ```
 
 **Where the choice is saved.** The EN | PT switch in the web interface (also on the unlock screen) writes `{ "lang": "pt" }` to `config.json` in the data folder (`~/.nullbrand/config.json`, or `$NULLBRAND_HOME/config.json`). The file sits outside the encrypted vault so the unlock screen can open in the right language before the master password is typed. It is created only when you pick a language: an auto-detected language is never written. Other fields in the file are kept. `--vault` does not move it.
@@ -140,7 +183,7 @@ The file has a plain-text header (format, version, scrypt parameters and salt) a
 | Threat | Protection |
 | --- | --- |
 | Someone on the local network | The server only listens on `127.0.0.1` and refuses to start on any other address |
-| Malicious site open in the browser | The browser opens `/auth?t=<token>` (32 random bytes, single-use, expires in 60 s); the server exchanges the token for an `HttpOnly; SameSite=Strict` session cookie and redirects to `/`. The token is not printed to the terminal (only if the browser doesn't open, over SSH/WSL/no display, or with `--print-url`). `Host` and `Origin` are validated on every request (blocks DNS rebinding and CSRF), there is no CORS, and locking the vault or quitting drops the session (to come back, run `npx nullbrand` again) |
+| Malicious site open in the browser | The browser opens `/auth?t=<token>` (32 random bytes, single-use, expires in 60 s); the server exchanges the token for an `HttpOnly; SameSite=Strict` session cookie and redirects to `/`. The token is not printed to the terminal (only if the browser doesn't open, over SSH/WSL/no display, or with `--print-url`). `Host` and `Origin` are validated on every request (blocks DNS rebinding and CSRF), there is no CORS, and locking the vault or quitting drops the session (to come back, run `nullbrand` again) |
 | XSS / third-party scripts | CSP `default-src 'none'`, no external resources, data always rendered with `textContent` |
 | Leaving the vault open | Automatic lock on inactivity (15 min); the key lives only in memory and is zeroed on lock |
 | Theft of the vault file | Brute force is limited by scrypt's cost (~128 MiB per attempt) — use a long master password |
@@ -161,13 +204,13 @@ npm test          # tests (node:test)
 npm run dev       # rebuilds, then opens the UI on ./dev-vault.json (separate from your real vault), no auto-lock
 ```
 
-`npx nullbrand` runs the published package (or the existing `dist/` inside the repo, **without rebuilding**).
+`node dist/bin/nullbrand.js` runs the existing `dist/` **without rebuilding**.
 To test source changes, use `npm run dev` or run `npm run build` first.
 
 Structure (TypeScript, compiled to `dist/` by `npm run build`):
 
 ```
-bin/nullbrand.ts            npx entry point
+bin/nullbrand.ts            CLI entry point
 src/crypto.ts               scrypt + AES-256-GCM
 src/vault.ts                vault file and item operations
 src/generator.ts            password generator
