@@ -1,6 +1,6 @@
 {
   "name": "nullbrand-pass",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "100% local, offline password manager with an encrypted vault file (early release, not independently audited).",
   "type": "module",
   "bin": {
