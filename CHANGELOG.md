@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-22
+
+First public version: AES-256-GCM vault with scrypt key derivation, local web interface on `127.0.0.1`, CLI, JSON import, encrypted backups and English/Portuguese localization. It also ships the desktop app (installers for macOS on Intel and Apple Silicon, Windows and Linux) and the npm package. The installers are not code-signed: verify them with `SHA256SUMS` (README, "How to verify your download"). The details of the release candidates are under 0.1.0-rc.1 and 0.1.0-rc.2 below.
+
 ## [0.1.0-rc.2] - 2026-10-21
 
 Second release candidate: adds the Intel macOS installer missing from rc.1. Published to npm under the `next` tag only.
@@ -49,7 +53,3 @@ Release candidate to validate the release pipeline (installers, checksums, signa
 - Copying to the clipboard on Windows no longer adds a byte order mark to the text.
 - README pointed to a non-existent `public/i18n.js`; the language list lives in `src/shared/i18n.ts`.
 - `SECURITY.md` referred to an e-mail address that does not exist; reports go through GitHub private vulnerability reporting.
-
-## [0.1.0]
-
-First version: AES-256-GCM vault with scrypt key derivation, local web interface on `127.0.0.1`, CLI, JSON import, encrypted backups and English/Portuguese localization.
