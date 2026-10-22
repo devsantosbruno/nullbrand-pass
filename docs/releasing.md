@@ -46,7 +46,7 @@ The workflow publishes with npm [trusted publishing](https://docs.npmjs.com/trus
 
 1. Turn on two-factor authentication (authorization and publishing) for the npm account that owns the package.
 2. Publish the first version by hand, because a trusted publisher can only be added to a package that exists. Do not burn a version for it: push the first tag as usual, let the workflow build and create the GitHub release, then **reject** the pending `publish-npm` run (it waits for the `npm` environment reviewer). Download `nullbrand-pass-X.Y.Z.tgz` and `SHA256SUMS` from that release, check them (README, "How to verify your download"), and run `npm publish --access public ./nullbrand-pass-X.Y.Z.tgz` with two-factor authentication. It is the very tarball that was checksummed; only this first version lacks the npm provenance statement. (This also holds the name, see `docs/trademark-check.md`.)
-3. On npmjs.com, open the package, Settings, Trusted Publisher, GitHub Actions, and enter the repository `devsantosbruno/nullbrand-pass`, the workflow `release.yml` and the environment `npm`.
+3. On npmjs.com, open the package, Settings, Trusted Publisher, GitHub Actions, and enter the repository `devsantosbruno/nullbrand-pass`, the workflow `release.yml` and the environment `npm`. Tick **Allow `npm publish`** (leave `dist-tag` off): `npm stage publish` is always allowed, but the workflow publishes directly, and without that box the publish fails with `403 OIDC permission denied for this action`. The fields cannot be edited afterwards, only deleted and recreated. A new configuration stays "Pending validation" until the first publish through the workflow.
 4. The GitHub environment `npm` (Settings, Environments) is limited to `v*` tags and has a required reviewer, so every publish needs an approval click. It holds no secret.
 5. In the package settings, require two-factor authentication and disallow tokens, so only the workflow can publish.
 
@@ -67,7 +67,7 @@ The maintainer is an admin, so the ruleset does not get in the way: delete and r
 
 Settings that cannot be audited from the CLI. Re-check them on npmjs.com and GitHub:
 
-- [ ] Trusted Publisher is `devsantosbruno/nullbrand-pass`, workflow `release.yml`, environment `npm`.
+- [ ] Trusted Publisher is `devsantosbruno/nullbrand-pass`, workflow `release.yml`, environment `npm`, with **Allow `npm publish`** ticked.
 - [ ] Package setting "Require two-factor authentication and disallow tokens" is on.
 - [ ] The `npm` environment still has its required reviewer and the `v*` tag-only policy.
 - [ ] The `release tags` ruleset is `active` with the admin role as its only bypass actor, and `main` protection still enforces admins.
