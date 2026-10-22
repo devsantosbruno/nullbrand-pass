@@ -78,13 +78,28 @@ jobs:
             if (types.length) { console.error('Type declarations missing from tarball:\n' + types.join('\n')); process.exit(1); }
           "
 
+  audit-desktop:
+    name: audit (desktop)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+      # Electron and electron-builder are devDependencies yet ship in the
+      # installers, so `--omit=dev` would audit nothing here.
+      - run: npm audit --audit-level=high
+        working-directory: desktop
+
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [verify, coverage, package]
+    needs: [verify, coverage, package, audit-desktop]
     runs-on: ubuntu-latest
     steps:
       - run: |
           test "${{ needs.verify.result }}" = success
           test "${{ needs.coverage.result }}" = success
           test "${{ needs.package.result }}" = success
+          test "${{ needs.audit-desktop.result }}" = success
