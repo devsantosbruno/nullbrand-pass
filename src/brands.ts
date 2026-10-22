@@ -3,12 +3,17 @@
 // through a hand-written type guard. Only checks that always hold for values the code produces are enforced.
 import { coded } from './errors.js';
 
+/** The part of Node's `Buffer` the brands rely on. It keeps the public declarations free of `Buffer`, so consumers need no `@types/node`; a real `Buffer` satisfies it. */
+interface Bytes extends Uint8Array<ArrayBuffer> {
+  toString(encoding?: 'base64'): string;
+}
+
 export type MasterPassword = string & { readonly __brand: 'MasterPassword' };
-export type Salt = Buffer & { readonly __brand: 'Salt' };
-export type Nonce = Buffer & { readonly __brand: 'Nonce' };
-export type Ciphertext = Buffer & { readonly __brand: 'Ciphertext' };
-export type DerivedKey = Buffer & { readonly __brand: 'DerivedKey' };
-export type AuthTag = Buffer & { readonly __brand: 'AuthTag' };
+export type Salt = Bytes & { readonly __brand: 'Salt' };
+export type Nonce = Bytes & { readonly __brand: 'Nonce' };
+export type Ciphertext = Bytes & { readonly __brand: 'Ciphertext' };
+export type DerivedKey = Bytes & { readonly __brand: 'DerivedKey' };
+export type AuthTag = Bytes & { readonly __brand: 'AuthTag' };
 
 // AES-256-GCM and scrypt sizes, in bytes.
 export const KEY_BYTES = 32;
@@ -30,51 +35,51 @@ export function toMasterPassword(value: string): MasterPassword {
 }
 
 /** Narrows to a salt of at least 16 bytes. */
-export function isSalt(value: Buffer): value is Salt {
+export function isSalt(value: Bytes): value is Salt {
   return value.length >= MIN_SALT_BYTES;
 }
 /** Brands a salt. @throws coded `err.crypto.invalidBuffer` if too short. */
-export function toSalt(value: Buffer): Salt {
+export function toSalt(value: Bytes): Salt {
   if (!isSalt(value)) throw invalidBufferError('salt');
   return value;
 }
 
 /** Narrows to a 12-byte GCM nonce. */
-export function isNonce(value: Buffer): value is Nonce {
+export function isNonce(value: Bytes): value is Nonce {
   return value.length === NONCE_BYTES;
 }
 /** Brands a nonce. @throws coded `err.crypto.invalidBuffer` if not 12 bytes. */
-export function toNonce(value: Buffer): Nonce {
+export function toNonce(value: Bytes): Nonce {
   if (!isNonce(value)) throw invalidBufferError('nonce');
   return value;
 }
 
 /** Narrows to a non-empty ciphertext. */
-export function isCiphertext(value: Buffer): value is Ciphertext {
+export function isCiphertext(value: Bytes): value is Ciphertext {
   return value.length > 0;
 }
 /** Brands a ciphertext. @throws coded `err.crypto.invalidBuffer` if empty. */
-export function toCiphertext(value: Buffer): Ciphertext {
+export function toCiphertext(value: Bytes): Ciphertext {
   if (!isCiphertext(value)) throw invalidBufferError('ciphertext');
   return value;
 }
 
 /** Narrows to a 32-byte key. */
-export function isDerivedKey(value: Buffer): value is DerivedKey {
+export function isDerivedKey(value: Bytes): value is DerivedKey {
   return value.length === KEY_BYTES;
 }
 /** Brands a derived key. @throws coded `err.crypto.invalidBuffer` if not 32 bytes. */
-export function toDerivedKey(value: Buffer): DerivedKey {
+export function toDerivedKey(value: Bytes): DerivedKey {
   if (!isDerivedKey(value)) throw invalidBufferError('derived key');
   return value;
 }
 
 /** Narrows to a full 16-byte GCM tag; a shorter one weakens integrity (Node 22.14 accepts a truncated tag unless told otherwise). */
-export function isAuthTag(value: Buffer): value is AuthTag {
+export function isAuthTag(value: Bytes): value is AuthTag {
   return value.length === GCM_TAG_LEN;
 }
 /** Brands an auth tag. Validates file content, so unlike the other constructors it throws the vault's `err.vault.corrupted`. */
-export function toAuthTag(value: Buffer): AuthTag {
+export function toAuthTag(value: Bytes): AuthTag {
   if (!isAuthTag(value)) throw coded('err.vault.corrupted', 'Corrupted vault (invalid authentication tag).');
   return value;
 }
