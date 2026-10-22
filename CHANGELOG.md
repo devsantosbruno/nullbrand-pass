@@ -4,11 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-22
+
 ### Added
 - Type declarations for the npm package: `nullbrand-pass`, `nullbrand-pass/generator` and `nullbrand-pass/formats` now have a `types` condition and ship their `.d.ts`, usable under `strict` without `@types/node`. The README documents the public surface ("Use as a library").
 - A consumer test (`scripts/consumer-types.test.mjs`) packs the project, installs the tarball in an empty project and compiles an import of every entry point; the CI `package` job also checks that the declarations are present and that tests, web sources and the `bin` and `public` declarations stay out.
 
 ### Changed
+- Repository hardening, no change to the package contents: Dependabot and a high-severity `npm audit` now cover `desktop/`, release tags `v*` are protected by a ruleset and the release checklist is documented (`docs/releasing.md`).
 - The branded byte types (`DerivedKey`, `Salt`, …) are declared over a small structural interface instead of `Buffer`, so the public declarations do not depend on Node's types. Types only: the compiled JavaScript is unchanged.
 
 ## [0.1.0] - 2026-10-22
