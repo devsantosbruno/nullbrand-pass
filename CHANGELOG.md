@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-22
+
+### Added
+- Type declarations for the npm package: `nullbrand-pass`, `nullbrand-pass/generator` and `nullbrand-pass/formats` now have a `types` condition and ship their `.d.ts`, usable under `strict` without `@types/node`. The README documents the public surface ("Use as a library").
+- A consumer test (`scripts/consumer-types.test.mjs`) packs the project, installs the tarball in an empty project and compiles an import of every entry point; the CI `package` job also checks that the declarations are present and that tests, web sources and the `bin` and `public` declarations stay out.
+
+### Changed
+- Repository hardening, no change to the package contents: Dependabot and a high-severity `npm audit` now cover `desktop/`, release tags `v*` are protected by a ruleset and the release checklist is documented (`docs/releasing.md`).
+- The branded byte types (`DerivedKey`, `Salt`, …) are declared over a small structural interface instead of `Buffer`, so the public declarations do not depend on Node's types. Types only: the compiled JavaScript is unchanged.
+
 ## [0.1.0] - 2026-10-22
 
 First public version: AES-256-GCM vault with scrypt key derivation, local web interface on `127.0.0.1`, CLI, JSON import, encrypted backups and English/Portuguese localization. It also ships the desktop app (installers for macOS on Intel and Apple Silicon, Windows and Linux) and the npm package. The installers are not code-signed: verify them with `SHA256SUMS` (README, "How to verify your download"). The details of the release candidates are under 0.1.0-rc.1 and 0.1.0-rc.2 below.

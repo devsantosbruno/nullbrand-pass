@@ -1,21 +1,22 @@
 {
   "name": "nullbrand-pass",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "100% local, offline password manager with an encrypted vault file (early release, not independently audited).",
   "type": "module",
   "bin": {
     "nullbrand-pass": "dist/bin/nullbrand.js"
   },
   "exports": {
-    ".": "./dist/src/vault.js",
-    "./generator": "./dist/src/generator.js",
-    "./formats": "./dist/src/formats/index.js"
+    ".": { "types": "./dist/src/vault.d.ts", "default": "./dist/src/vault.js" },
+    "./generator": { "types": "./dist/src/generator.d.ts", "default": "./dist/src/generator.js" },
+    "./formats": { "types": "./dist/src/formats/index.d.ts", "default": "./dist/src/formats/index.js" }
   },
   "files": [
     "dist",
     "!dist/test",
     "!dist/src/web",
-    "!dist/**/*.d.ts",
+    "!dist/bin/*.d.ts",
+    "!dist/public/**/*.d.ts",
     "!dist/.tsbuildinfo",
     "README.md",
     "LICENSE",

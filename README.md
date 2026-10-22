@@ -206,6 +206,24 @@ The file has a plain-text header (format, version, scrypt parameters and salt) a
 
 **Out of scope:** malware running as your user (it can read memory or capture the keyboard) and other local processes of the same user that can read the terminal link.
 
+## Use as a library
+
+The npm package also exposes three entry points, typed for TypeScript (strict, `NodeNext`). Node 22.14 or newer, ESM only.
+
+| Import | What it gives you |
+| --- | --- |
+| `nullbrand-pass` | `Vault` and the vault file helpers (`readVaultFile`, `readBackupItems`, `normalizeItem`, …) |
+| `nullbrand-pass/generator` | `generatePassword`, `entropyBits`, `DEFAULT_OPTIONS` |
+| `nullbrand-pass/formats` | `parseImport`, `planImport`, `exportPlain`, `tooLarge`, `MAX_IMPORT_BYTES` |
+
+```ts
+import { generatePassword } from 'nullbrand-pass/generator';
+
+const password: string = generatePassword({ length: 24 });
+```
+
+The declarations need no `@types/node`. What is stable while the version is `0.x`: only these three entry points and the names listed above; anything else in the package (the CLI, the server, files under `dist/`) is internal and may change without notice. A breaking change to them raises the minor version (see `docs/releasing.md`, "Versioning"). The library carries the same caveat as the app: it has not been independently audited.
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).

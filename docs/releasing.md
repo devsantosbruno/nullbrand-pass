@@ -38,7 +38,7 @@ Nothing else is manual. `.github/workflows/release.yml`:
 6. creates the GitHub release with the changelog section as notes;
 7. publishes the checksummed tarball to npm with provenance (a pre-release version goes to the `next` tag, never `latest`). This is the last step: it cannot be undone, so it runs only after everything else succeeded.
 
-A failure before step 6 publishes nothing. Fix the problem, delete the tag (`git push --delete origin vX.Y.Z` and `git tag -d vX.Y.Z`) and tag again. If only the npm step fails, the GitHub release already exists: fix the cause and re-run that job from the Actions page (do not retag). An npm version can never be published twice, and `npm unpublish` is limited, so a bad version is fixed by a new patch release and `npm deprecate`.
+A failure before step 6 publishes nothing. Fix the problem, delete the tag and tag again (see "Repository settings"). If only the npm step fails, the GitHub release already exists: fix the cause and re-run that job from the Actions page (do not retag). An npm version can never be published twice, and `npm unpublish` is limited, so a bad version is fixed by a new patch release and `npm deprecate`.
 
 ## npm publishing
 
@@ -48,9 +48,29 @@ The workflow publishes with npm [trusted publishing](https://docs.npmjs.com/trus
 2. Publish the first version by hand, because a trusted publisher can only be added to a package that exists. Do not burn a version for it: push the first tag as usual, let the workflow build and create the GitHub release, then **reject** the pending `publish-npm` run (it waits for the `npm` environment reviewer). Download `nullbrand-pass-X.Y.Z.tgz` and `SHA256SUMS` from that release, check them (README, "How to verify your download"), and run `npm publish --access public ./nullbrand-pass-X.Y.Z.tgz` with two-factor authentication. It is the very tarball that was checksummed; only this first version lacks the npm provenance statement. (This also holds the name, see `docs/trademark-check.md`.)
 3. On npmjs.com, open the package, Settings, Trusted Publisher, GitHub Actions, and enter the repository `devsantosbruno/nullbrand-pass`, the workflow `release.yml` and the environment `npm`.
 4. The GitHub environment `npm` (Settings, Environments) is limited to `v*` tags and has a required reviewer, so every publish needs an approval click. It holds no secret.
-5. Optionally, in the package settings, require two-factor authentication and disallow tokens, so only the workflow can publish.
+5. In the package settings, require two-factor authentication and disallow tokens, so only the workflow can publish.
 
 The next tag publishes through the workflow. Revoking access is removing the trusted publisher in the package settings.
+
+## Repository settings
+
+Two protections limit who can start a release.
+
+- **Tag ruleset** (`release tags`) on `refs/tags/v*`: creation, deletion and non-fast-forward updates are blocked for everyone except the repository **admin** role, which is the only bypass actor. A write-access collaborator cannot create, move or delete a release tag.
+- **`main` protection**: `ci-ok` and CodeQL are required and apply to admins (`enforce_admins`). Approvals stay at 0 while there is a single maintainer; set them to 1 with code-owner review (`CODEOWNERS`) when a second maintainer joins.
+
+### Retagging after a failed release
+
+The maintainer is an admin, so the ruleset does not get in the way: delete and recreate the tag as in "Cutting a release". Never retag a version that already reached npm: publish a new patch instead. Do not add other bypass actors; if the maintainer's account ever changes, update the ruleset before tagging.
+
+### Checklist before each release
+
+Settings that cannot be audited from the CLI. Re-check them on npmjs.com and GitHub:
+
+- [ ] Trusted Publisher is `devsantosbruno/nullbrand-pass`, workflow `release.yml`, environment `npm`.
+- [ ] Package setting "Require two-factor authentication and disallow tokens" is on.
+- [ ] The `npm` environment still has its required reviewer and the `v*` tag-only policy.
+- [ ] The `release tags` ruleset is `active` with the admin role as its only bypass actor, and `main` protection still enforces admins.
 
 ## Code signing
 
