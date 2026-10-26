@@ -19,7 +19,7 @@
     "package:dir": "npm run build && electron-builder --config builder.yml --dir"
   },
   "devDependencies": {
-    "electron": "44.9.0",
+    "electron": "45.0.0",
     "electron-builder": "26.17.0",
     "typescript": "7.0.2"
   }
